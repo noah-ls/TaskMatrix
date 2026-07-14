@@ -18,7 +18,7 @@ final class TaskStore {
         load()
     }
 
-    func addTask(title: String, quadrant: Quadrant) {
+    func addTask(title: String, quadrant: Quadrant, dueDate: Date? = nil) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
 
@@ -28,9 +28,17 @@ final class TaskStore {
                 title: trimmedTitle,
                 quadrant: quadrant,
                 isCompleted: false,
-                createdAt: Date()
+                createdAt: Date(),
+                dueDate: dueDate
             )
         )
+        persistAndNotify()
+    }
+
+    func updateDueDate(id: String, dueDate: Date?) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+
+        tasks[index].dueDate = dueDate
         persistAndNotify()
     }
 

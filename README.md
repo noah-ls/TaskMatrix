@@ -17,6 +17,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
 - **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
 - **Subtasks** — right-click a task → *Add Subtask…* to break it into steps; check steps off individually (the parent shows `done/total` progress), collapse/expand the list with the chevron, and rename or delete via right-click. Completing the parent completes all its subtasks
+- **Due dates** — optionally set a date-only deadline when creating or editing a task (off by default); the task shows a due badge ("Today", "Tomorrow", or the date) that turns red when overdue and amber when due today
 - **Auto-save** — every change is persisted immediately; no manual save
 
 ## Persistence

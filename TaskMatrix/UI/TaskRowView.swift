@@ -24,6 +24,7 @@ final class TaskRowView: NSView {
 
     private let titleLabel = NSTextField(labelWithString: "")
     private let progressLabel = NSTextField(labelWithString: "")
+    private let dueLabel = NSTextField(labelWithString: "")
     private lazy var completeCheckbox: NSButton = {
         let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(handleCheckboxChange(_:)))
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -160,6 +161,12 @@ final class TaskRowView: NSView {
 
         var headerViews: [NSView] = [completeCheckbox, titleLabel, headerSpacer]
 
+        if task.dueDate != nil {
+            dueLabel.translatesAutoresizingMaskIntoConstraints = false
+            dueLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+            headerViews.append(dueLabel)
+        }
+
         if !task.subtasks.isEmpty {
             progressLabel.translatesAutoresizingMaskIntoConstraints = false
             progressLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
@@ -249,6 +256,21 @@ final class TaskRowView: NSView {
             progressLabel.stringValue = "\(completedCount)/\(task.subtasks.count)"
         }
 
+        if let dueDate = task.dueDate {
+            dueLabel.stringValue = Self.dueText(for: dueDate)
+
+            let calendar = Calendar.current
+            if task.isCompleted {
+                dueLabel.textColor = NSColor.taskMuted
+            } else if dueDate < calendar.startOfDay(for: Date()) {
+                dueLabel.textColor = NSColor.taskOverdue
+            } else if calendar.isDateInToday(dueDate) {
+                dueLabel.textColor = NSColor.taskDueToday
+            } else {
+                dueLabel.textColor = NSColor.taskMuted
+            }
+        }
+
         if task.isCompleted {
             titleLabel.attributedStringValue = NSAttributedString(
                 string: task.title,
@@ -289,6 +311,19 @@ final class TaskRowView: NSView {
         layer.borderWidth = 1
         layer.backgroundColor = NSColor.taskSurface.cgColor
         layer.borderColor = (isHovering ? accent.withAlphaComponent(0.45) : NSColor.taskRing).cgColor
+    }
+
+    private static func dueText(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = calendar.isDate(date, equalTo: Date(), toGranularity: .year)
+            ? "MMM d"
+            : "MMM d, yyyy"
+        return formatter.string(from: date)
     }
 
     private static func chevronImage(expanded: Bool) -> NSImage? {

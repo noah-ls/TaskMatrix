@@ -12,6 +12,9 @@ extension NSColor {
     static let taskRing = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 0.10)
     static let taskSurface = NSColor.white
     static let taskSurfaceHover = NSColor.white
+
+    static let taskOverdue = NSColor(red: 0.898, green: 0.283, blue: 0.302, alpha: 1)
+    static let taskDueToday = NSColor(red: 0.792, green: 0.557, blue: 0.0, alpha: 1)
 }
 
 extension Quadrant {

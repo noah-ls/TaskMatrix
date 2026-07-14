@@ -12,6 +12,8 @@ struct TaskItem: Codable, Equatable {
     var quadrant: Quadrant
     var isCompleted: Bool
     let createdAt: Date
+    /// Date-only deadline (start of day); nil when no due date is set.
+    var dueDate: Date?
     var subtasks: [SubTask]
 
     init(
@@ -20,6 +22,7 @@ struct TaskItem: Codable, Equatable {
         quadrant: Quadrant,
         isCompleted: Bool,
         createdAt: Date,
+        dueDate: Date? = nil,
         subtasks: [SubTask] = []
     ) {
         self.id = id
@@ -27,6 +30,7 @@ struct TaskItem: Codable, Equatable {
         self.quadrant = quadrant
         self.isCompleted = isCompleted
         self.createdAt = createdAt
+        self.dueDate = dueDate
         self.subtasks = subtasks
     }
 
@@ -37,7 +41,8 @@ struct TaskItem: Codable, Equatable {
         quadrant = try container.decode(Quadrant.self, forKey: .quadrant)
         isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
-        // Older saves predate subtasks; default to none.
+        // Older saves predate these fields; default gracefully.
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
         subtasks = try container.decodeIfPresent([SubTask].self, forKey: .subtasks) ?? []
     }
 }

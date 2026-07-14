@@ -9,7 +9,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         case subtask(parentTitle: String, existing: SubTask?)
     }
 
-    var onSubmit: ((String, Quadrant) -> Void)?
+    var onSubmit: ((String, Quadrant, Date?) -> Void)?
 
     private let mode: Mode
     private var selectedQuadrant: Quadrant
@@ -19,6 +19,8 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     private let titleField = NSTextField()
     private let pickerView = QuadrantPickerView()
     private var submitButton: PillButton?
+    private var dueDateCheckbox: NSButton?
+    private var dueDatePicker: NSDatePicker?
 
     init(mode: Mode) {
         self.mode = mode
@@ -50,6 +52,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         let subheading: String
         let submitTitle: String
         var initialTitle = ""
+        var initialDueDate: Date?
 
         switch mode {
         case .create:
@@ -61,6 +64,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
             subheading = "Update the title or move it to another quadrant."
             submitTitle = "Save Changes"
             initialTitle = task.title
+            initialDueDate = task.dueDate
         case .subtask(let parentTitle, let existing):
             heading = existing == nil ? "New Subtask" : "Edit Subtask"
             subheading = "for \u{201C}\(parentTitle)\u{201D}"
@@ -137,6 +141,46 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
             self.view.window?.makeFirstResponder(self.titleField)
         }
 
+        // Due date — optional, date only.
+        let dueDateLabel = NSTextField(labelWithString: "")
+        dueDateLabel.translatesAutoresizingMaskIntoConstraints = false
+        let dueDateText = NSMutableAttributedString(string: "DUE DATE")
+        dueDateText.addAttributes(
+            [
+                .font: NSFont.systemFont(ofSize: 10, weight: .bold),
+                .foregroundColor: NSColor.taskMuted,
+                .kern: 0.8
+            ],
+            range: NSRange(location: 0, length: dueDateText.length)
+        )
+        dueDateLabel.attributedStringValue = dueDateText
+
+        let checkbox = NSButton(checkboxWithTitle: "Set due date", target: self, action: #selector(handleDueDateToggle(_:)))
+        checkbox.translatesAutoresizingMaskIntoConstraints = false
+        checkbox.font = .systemFont(ofSize: 12, weight: .medium)
+        checkbox.contentTintColor = NSColor.taskAccentText
+        checkbox.state = initialDueDate == nil ? .off : .on
+        dueDateCheckbox = checkbox
+
+        let datePicker = NSDatePicker()
+        datePicker.translatesAutoresizingMaskIntoConstraints = false
+        datePicker.datePickerStyle = .textFieldAndStepper
+        datePicker.datePickerElements = .yearMonthDay
+        datePicker.dateValue = initialDueDate ?? Date()
+        datePicker.isEnabled = initialDueDate != nil
+        dueDatePicker = datePicker
+
+        let dueDateSpacer = NSView()
+        dueDateSpacer.translatesAutoresizingMaskIntoConstraints = false
+        dueDateSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        dueDateSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let dueDateRow = NSStackView(views: [checkbox, datePicker, dueDateSpacer])
+        dueDateRow.translatesAutoresizingMaskIntoConstraints = false
+        dueDateRow.orientation = .horizontal
+        dueDateRow.alignment = .centerY
+        dueDateRow.spacing = 10
+
         let cancelButton = PillButton(
             title: "Cancel",
             style: .subtle,
@@ -170,6 +214,8 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         if showsQuadrantPicker {
             view.addSubview(quadrantLabel)
             view.addSubview(pickerView)
+            view.addSubview(dueDateLabel)
+            view.addSubview(dueDateRow)
         }
         view.addSubview(buttonRow)
 
@@ -209,7 +255,14 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
                 optionTopRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
                 optionBottomRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
 
-                buttonRow.topAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: 13)
+                dueDateLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                dueDateLabel.topAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: 14),
+
+                dueDateRow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                dueDateRow.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+                dueDateRow.topAnchor.constraint(equalTo: dueDateLabel.bottomAnchor, constant: 7),
+
+                buttonRow.topAnchor.constraint(equalTo: dueDateRow.bottomAnchor, constant: 14)
             ])
         } else {
             buttonRow.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 18).isActive = true
@@ -261,6 +314,11 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     }
 
     @objc
+    private func handleDueDateToggle(_ sender: NSButton) {
+        dueDatePicker?.isEnabled = sender.state == .on
+    }
+
+    @objc
     private func handleCancel(_ sender: Any?) {
         dismiss(self)
     }
@@ -270,7 +328,14 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        onSubmit?(trimmed, selectedQuadrant)
+        var dueDate: Date?
+        if showsQuadrantPicker,
+           dueDateCheckbox?.state == .on,
+           let picked = dueDatePicker?.dateValue {
+            dueDate = Calendar.current.startOfDay(for: picked)
+        }
+
+        onSubmit?(trimmed, selectedQuadrant, dueDate)
         dismiss(self)
     }
 }

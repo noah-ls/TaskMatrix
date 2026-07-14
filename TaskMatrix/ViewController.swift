@@ -270,8 +270,8 @@ final class ViewController: NSViewController {
 
     private func presentAddTaskDialog(preselected: Quadrant = .q1) {
         let form = TaskFormViewController(mode: .create(preselected))
-        form.onSubmit = { [weak self] title, quadrant in
-            self?.store.addTask(title: title, quadrant: quadrant)
+        form.onSubmit = { [weak self] title, quadrant, dueDate in
+            self?.store.addTask(title: title, quadrant: quadrant, dueDate: dueDate)
         }
         presentAsSheet(form)
     }
@@ -280,10 +280,13 @@ final class ViewController: NSViewController {
         guard let task = store.task(id: taskID) else { return }
 
         let form = TaskFormViewController(mode: .edit(task))
-        form.onSubmit = { [weak self] title, quadrant in
+        form.onSubmit = { [weak self] title, quadrant, dueDate in
             self?.store.updateTitle(id: taskID, newTitle: title)
             if quadrant != task.quadrant {
                 self?.store.moveTask(id: taskID, to: quadrant)
+            }
+            if dueDate != task.dueDate {
+                self?.store.updateDueDate(id: taskID, dueDate: dueDate)
             }
         }
         presentAsSheet(form)
@@ -293,7 +296,7 @@ final class ViewController: NSViewController {
         guard let task = store.task(id: taskID) else { return }
 
         let form = TaskFormViewController(mode: .subtask(parentTitle: task.title, existing: nil))
-        form.onSubmit = { [weak self] title, _ in
+        form.onSubmit = { [weak self] title, _, _ in
             self?.collapsedTaskIDs.remove(taskID)
             self?.store.addSubtask(taskID: taskID, title: title)
         }
@@ -307,7 +310,7 @@ final class ViewController: NSViewController {
         }
 
         let form = TaskFormViewController(mode: .subtask(parentTitle: task.title, existing: subtask))
-        form.onSubmit = { [weak self] title, _ in
+        form.onSubmit = { [weak self] title, _, _ in
             self?.store.updateSubtaskTitle(taskID: taskID, subtaskID: subtaskID, newTitle: title)
         }
         presentAsSheet(form)

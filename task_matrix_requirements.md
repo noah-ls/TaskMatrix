@@ -85,6 +85,7 @@ Task {
   quadrant: Q1 | Q2 | Q3 | Q4
   isCompleted: Bool
   createdAt: Date
+  dueDate: Date?          // date-only deadline, unset by default
   subtasks: [SubTask]
 }
 
