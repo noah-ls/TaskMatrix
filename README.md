@@ -30,9 +30,24 @@ its container:
 ~/Library/Containers/<bundle-id>/Data/Library/Application Support/TaskMatrix/tasks.json
 ```
 
-Writes are atomic; there is no sync, no account, no network access. Saves
-from older versions load unchanged — newer optional fields (subtasks, due
-date) default gracefully.
+Writes are atomic. Saves from older versions load unchanged — newer
+optional fields (subtasks, due date) default gracefully.
+
+### iCloud sync
+
+Every change is also pushed to iCloud's key-value store, and payloads from
+other devices are adopted automatically (last writer wins, newest
+timestamp). The sync layer degrades gracefully: without the iCloud
+entitlement it silently stays device-local.
+
+To activate real cross-device sync, iCloud requires development signing:
+
+1. Open the project in Xcode and sign in to an Apple Developer account
+   (Settings → Accounts).
+2. In *Signing & Capabilities*, pick your Team.
+3. Set *Code Signing Entitlements* to `TaskMatrix/TaskMatrix.entitlements`
+   (already in the repo, containing the key-value store entitlement), or
+   add the iCloud → Key-value storage capability.
 
 ## Requirements & Building
 

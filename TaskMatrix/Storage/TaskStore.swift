@@ -6,6 +6,10 @@ final class TaskStore {
     private(set) var tasks: [TaskItem] = []
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let cloudSync = TaskCloudSync()
+    /// Timestamp of the copy we hold; used to decide whether an iCloud
+    /// payload is newer than local state (last writer wins).
+    private var lastLocalUpdate = Date.distantPast
 
     init() {
         decoder = JSONDecoder()
@@ -16,6 +20,15 @@ final class TaskStore {
         encoder.dateEncodingStrategy = .iso8601
 
         load()
+
+        // Adopt a newer copy from iCloud at launch, then track pushes
+        // arriving from other devices while running.
+        if let envelope = cloudSync.currentEnvelope() {
+            adoptIfNewer(envelope)
+        }
+        cloudSync.onRemoteChange = { [weak self] envelope in
+            self?.adoptIfNewer(envelope)
+        }
     }
 
     func addTask(title: String, quadrant: Quadrant, dueDate: Date? = nil) {
@@ -124,7 +137,18 @@ final class TaskStore {
     }
 
     private func persistAndNotify() {
+        lastLocalUpdate = Date()
         save()
+        cloudSync.push(tasks: tasks, updatedAt: lastLocalUpdate)
+        onChange?(tasks)
+    }
+
+    private func adoptIfNewer(_ envelope: TaskCloudSync.Envelope) {
+        guard envelope.updatedAt > lastLocalUpdate else { return }
+
+        tasks = envelope.tasks
+        lastLocalUpdate = envelope.updatedAt
+        save()   // local file only — pushing back would echo the change
         onChange?(tasks)
     }
 
@@ -138,6 +162,11 @@ final class TaskStore {
         do {
             let data = try Data(contentsOf: url)
             tasks = try decoder.decode([TaskItem].self, from: data)
+
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+            if let modified = attributes?[.modificationDate] as? Date {
+                lastLocalUpdate = modified
+            }
         } catch {
             NSLog("[TaskStore] Failed loading tasks: \(error.localizedDescription)")
             tasks = []
