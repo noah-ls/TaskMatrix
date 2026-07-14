@@ -19,8 +19,9 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     private let titleField = NSTextField()
     private let pickerView = QuadrantPickerView()
     private var submitButton: PillButton?
-    private var dueDateCheckbox: NSButton?
-    private var dueDateCalendar: CalendarPickerView?
+    private var pendingDueDate: Date?
+    private var dueDateButton: PillButton?
+    private var clearDueDateButton: NSButton?
 
     init(mode: Mode) {
         self.mode = mode
@@ -155,24 +156,36 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         )
         dueDateLabel.attributedStringValue = dueDateText
 
-        let checkbox = NSButton(checkboxWithTitle: "Set due date", target: self, action: #selector(handleDueDateToggle(_:)))
-        checkbox.translatesAutoresizingMaskIntoConstraints = false
-        checkbox.font = .systemFont(ofSize: 12, weight: .medium)
-        checkbox.contentTintColor = NSColor.taskAccentText
-        checkbox.state = initialDueDate == nil ? .off : .on
-        dueDateCheckbox = checkbox
+        // Compact control — the calendar itself opens in a popover so it
+        // never occupies sheet space.
+        pendingDueDate = initialDueDate
 
-        // Custom month calendar — pick a day with one click, no digit entry.
-        let calendarView = CalendarPickerView()
-        calendarView.selectedDate = initialDueDate
-        calendarView.isHidden = initialDueDate == nil
-        dueDateCalendar = calendarView
+        let dateButton = PillButton(title: "", style: .subtle, target: self, action: #selector(handleDueDateButton(_:)))
+        dueDateButton = dateButton
 
-        let dueDateRow = NSStackView(views: [checkbox, calendarView])
+        let clearButton = NSButton(title: "", target: self, action: #selector(handleClearDueDate(_:)))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        clearButton.isBordered = false
+        clearButton.imagePosition = .imageOnly
+        let clearConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        clearButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Clear due date")?
+            .withSymbolConfiguration(clearConfig)
+        clearButton.contentTintColor = NSColor.taskMuted
+        clearButton.toolTip = "Clear due date"
+        clearDueDateButton = clearButton
+
+        let dueDateSpacer = NSView()
+        dueDateSpacer.translatesAutoresizingMaskIntoConstraints = false
+        dueDateSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        dueDateSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let dueDateRow = NSStackView(views: [dateButton, clearButton, dueDateSpacer])
         dueDateRow.translatesAutoresizingMaskIntoConstraints = false
-        dueDateRow.orientation = .vertical
-        dueDateRow.alignment = .leading
-        dueDateRow.spacing = 8
+        dueDateRow.orientation = .horizontal
+        dueDateRow.alignment = .centerY
+        dueDateRow.spacing = 6
+
+        refreshDueDateUI()
 
         let cancelButton = PillButton(
             title: "Cancel",
@@ -306,16 +319,27 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         submitButton?.isEnabled = !trimmed.isEmpty
     }
 
-    @objc
-    private func handleDueDateToggle(_ sender: NSButton) {
-        let isOn = sender.state == .on
-        if isOn, dueDateCalendar?.selectedDate == nil {
-            dueDateCalendar?.selectedDate = Calendar.current.startOfDay(for: Date())
+    private func refreshDueDateUI() {
+        if let pendingDueDate {
+            dueDateButton?.updateTitle("Due \(DueDateFormatting.shortLabel(for: pendingDueDate))")
+        } else {
+            dueDateButton?.updateTitle("Add Due Date…")
         }
-        dueDateCalendar?.isHidden = !isOn
-        // The calendar takes real vertical space; let the sheet grow and
-        // shrink with it.
-        preferredContentSize = view.fittingSize
+        clearDueDateButton?.isHidden = pendingDueDate == nil
+    }
+
+    @objc
+    private func handleDueDateButton(_ sender: NSButton) {
+        CalendarPopover.show(from: sender, selectedDate: pendingDueDate) { [weak self] date in
+            self?.pendingDueDate = Calendar.current.startOfDay(for: date)
+            self?.refreshDueDateUI()
+        }
+    }
+
+    @objc
+    private func handleClearDueDate(_ sender: NSButton) {
+        pendingDueDate = nil
+        refreshDueDateUI()
     }
 
     @objc
@@ -328,14 +352,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        var dueDate: Date?
-        if showsQuadrantPicker,
-           dueDateCheckbox?.state == .on,
-           let picked = dueDateCalendar?.selectedDate {
-            dueDate = Calendar.current.startOfDay(for: picked)
-        }
-
-        onSubmit?(trimmed, selectedQuadrant, dueDate)
+        onSubmit?(trimmed, selectedQuadrant, showsQuadrantPicker ? pendingDueDate : nil)
         dismiss(self)
     }
 }

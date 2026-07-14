@@ -121,37 +121,20 @@ final class TaskRowView: NSView {
         menu.addItem(addSubtaskItem)
         menu.addItem(.separator())
 
-        let dueDateMenuItem = NSMenuItem(title: "Due Date", action: nil, keyEquivalent: "")
-        let dueDateMenu = NSMenu(title: "Due Date")
-
-        let today = Calendar.current.startOfDay(for: Date())
-        let quickPicks: [(String, Date)] = [
-            ("Today", today),
-            ("Tomorrow", Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today),
-            ("Next Week", Calendar.current.date(byAdding: .day, value: 7, to: today) ?? today)
-        ]
-
-        for (label, date) in quickPicks {
-            let item = NSMenuItem(title: label, action: #selector(handleSetDueDate(_:)), keyEquivalent: "")
-            item.representedObject = date
-            item.target = self
-            item.state = task.dueDate == date ? .on : .off
-            dueDateMenu.addItem(item)
-        }
-
-        let customItem = NSMenuItem(title: "Custom…", action: #selector(handleCustomDueDate(_:)), keyEquivalent: "")
-        customItem.target = self
-        dueDateMenu.addItem(customItem)
+        let setDueDateItem = NSMenuItem(
+            title: task.dueDate == nil ? "Set Due Date…" : "Change Due Date…",
+            action: #selector(handleShowDueDatePicker(_:)),
+            keyEquivalent: ""
+        )
+        setDueDateItem.target = self
+        menu.addItem(setDueDateItem)
 
         if task.dueDate != nil {
-            dueDateMenu.addItem(.separator())
-            let clearItem = NSMenuItem(title: "Clear Due Date", action: #selector(handleSetDueDate(_:)), keyEquivalent: "")
+            let clearItem = NSMenuItem(title: "Clear Due Date", action: #selector(handleClearDueDate(_:)), keyEquivalent: "")
             clearItem.target = self
-            dueDateMenu.addItem(clearItem)
+            menu.addItem(clearItem)
         }
 
-        dueDateMenuItem.submenu = dueDateMenu
-        menu.addItem(dueDateMenuItem)
         menu.addItem(.separator())
 
         let moveMenuItem = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
@@ -291,7 +274,7 @@ final class TaskRowView: NSView {
         }
 
         if let dueDate = task.dueDate {
-            dueLabel.stringValue = Self.dueText(for: dueDate)
+            dueLabel.stringValue = DueDateFormatting.shortLabel(for: dueDate)
 
             let calendar = Calendar.current
             if task.isCompleted {
@@ -347,19 +330,6 @@ final class TaskRowView: NSView {
         layer.borderColor = (isHovering ? accent.withAlphaComponent(0.45) : NSColor.taskRing).cgColor
     }
 
-    private static func dueText(for date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return "Today" }
-        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
-        if calendar.isDateInYesterday(date) { return "Yesterday" }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = calendar.isDate(date, equalTo: Date(), toGranularity: .year)
-            ? "MMM d"
-            : "MMM d, yyyy"
-        return formatter.string(from: date)
-    }
-
     private static func chevronImage(expanded: Bool) -> NSImage? {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
         return NSImage(
@@ -397,15 +367,15 @@ final class TaskRowView: NSView {
     }
 
     @objc
-    private func handleSetDueDate(_ sender: NSMenuItem) {
-        // representedObject carries the date; nil (the Clear item) clears it.
-        onSetDueDate?(sender.representedObject as? Date)
+    private func handleShowDueDatePicker(_ sender: NSMenuItem) {
+        CalendarPopover.show(from: self, selectedDate: task.dueDate) { [weak self] date in
+            self?.onSetDueDate?(Calendar.current.startOfDay(for: date))
+        }
     }
 
     @objc
-    private func handleCustomDueDate(_ sender: NSMenuItem) {
-        // The edit sheet has the full calendar picker.
-        onEditRequested?()
+    private func handleClearDueDate(_ sender: NSMenuItem) {
+        onSetDueDate?(nil)
     }
 
     @objc

@@ -8,6 +8,7 @@ final class PillButton: NSButton {
     }
 
     private var trackingAreaRef: NSTrackingArea?
+    private var titleColor: NSColor = .taskAccentText
 
     override var isEnabled: Bool {
         didSet {
@@ -37,15 +38,21 @@ final class PillButton: NSButton {
         }
 
         layer?.backgroundColor = backgroundColor.cgColor
+        titleColor = textColor
+        updateTitle(title)
+
+        heightAnchor.constraint(equalToConstant: 36).isActive = true
+    }
+
+    func updateTitle(_ title: String) {
         attributedTitle = NSAttributedString(
             string: title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 14, weight: .bold),
-                .foregroundColor: textColor
+                .foregroundColor: titleColor
             ]
         )
-
-        heightAnchor.constraint(equalToConstant: 36).isActive = true
+        invalidateIntrinsicContentSize()
     }
 
     @available(*, unavailable)
