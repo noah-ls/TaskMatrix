@@ -399,10 +399,12 @@ private final class TaskRowView: NSView {
 
     private let task: TaskItem
     private let isSelected: Bool
-    private let isExpanded: Bool
+    private var isExpanded: Bool
     private var isHovering = false
     private var trackingAreaRef: NSTrackingArea?
     private var subtaskRows: [SubtaskRowView] = []
+    private var subtaskStack: NSStackView?
+    private var chevronButton: NSButton?
 
     private let titleLabel = NSTextField(labelWithString: "")
     private let progressLabel = NSTextField(labelWithString: "")
@@ -411,7 +413,7 @@ private final class TaskRowView: NSView {
         checkbox.translatesAutoresizingMaskIntoConstraints = false
         checkbox.setButtonType(.switch)
         checkbox.contentTintColor = NSColor.taskAccentText
-        checkbox.controlSize = .small
+        checkbox.controlSize = .regular
         return checkbox
     }()
 
@@ -537,19 +539,23 @@ private final class TaskRowView: NSView {
 
         if !task.subtasks.isEmpty {
             progressLabel.translatesAutoresizingMaskIntoConstraints = false
-            progressLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+            progressLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
             progressLabel.textColor = NSColor.taskMuted
             headerViews.append(progressLabel)
 
+            // One fixed-size, rotating chevron: swapping between the
+            // chevron.right/chevron.down symbols changes the button width
+            // and nudges the progress label sideways on every toggle.
             let chevron = NSButton(title: "", target: self, action: #selector(handleToggleExpanded(_:)))
             chevron.translatesAutoresizingMaskIntoConstraints = false
             chevron.isBordered = false
             chevron.imagePosition = .imageOnly
-            chevron.image = NSImage(
-                systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
-                accessibilityDescription: isExpanded ? "Collapse subtasks" : "Expand subtasks"
-            )
+            let symbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+            chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Toggle subtasks")?
+                .withSymbolConfiguration(symbolConfig)
             chevron.contentTintColor = NSColor.taskMuted
+            chevron.frameCenterRotation = isExpanded ? 0 : -90
+            chevronButton = chevron
             headerViews.append(chevron)
         }
 
@@ -568,8 +574,8 @@ private final class TaskRowView: NSView {
         addSubview(contentStack)
 
         NSLayoutConstraint.activate([
-            completeCheckbox.widthAnchor.constraint(equalToConstant: 16),
-            completeCheckbox.heightAnchor.constraint(equalToConstant: 16),
+            completeCheckbox.widthAnchor.constraint(equalToConstant: 18),
+            completeCheckbox.heightAnchor.constraint(equalToConstant: 18),
 
             contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
             contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -11),
@@ -577,15 +583,22 @@ private final class TaskRowView: NSView {
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
 
             headerRow.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
-            headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 20)
+            headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 22)
         ])
 
-        if isExpanded, !task.subtasks.isEmpty {
-            let subtaskStack = NSStackView()
-            subtaskStack.translatesAutoresizingMaskIntoConstraints = false
-            subtaskStack.orientation = .vertical
-            subtaskStack.alignment = .leading
-            subtaskStack.spacing = 3
+        if let chevronButton {
+            NSLayoutConstraint.activate([
+                chevronButton.widthAnchor.constraint(equalToConstant: 24),
+                chevronButton.heightAnchor.constraint(equalToConstant: 24)
+            ])
+        }
+
+        if !task.subtasks.isEmpty {
+            let stack = NSStackView()
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 3
 
             for subtask in task.subtasks {
                 let row = SubtaskRowView(subtask: subtask)
@@ -599,12 +612,14 @@ private final class TaskRowView: NSView {
                     self?.onDeleteSubtask?(subtask.id)
                 }
                 subtaskRows.append(row)
-                subtaskStack.addArrangedSubview(row)
-                row.widthAnchor.constraint(equalTo: subtaskStack.widthAnchor).isActive = true
+                stack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             }
 
-            contentStack.addArrangedSubview(subtaskStack)
-            subtaskStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+            stack.isHidden = !isExpanded
+            contentStack.addArrangedSubview(stack)
+            stack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+            subtaskStack = stack
         }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
@@ -673,7 +688,7 @@ private final class TaskRowView: NSView {
 
         // A double-click inside a subtask row is handled by that row's own
         // recognizer; don't open the parent editor on top of it.
-        for row in subtaskRows {
+        for row in subtaskRows where !row.isHiddenOrHasHiddenAncestor {
             let location = recognizer.location(in: row)
             if row.bounds.contains(location) {
                 return
@@ -685,7 +700,19 @@ private final class TaskRowView: NSView {
 
     @objc
     private func handleToggleExpanded(_ sender: NSButton) {
+        isExpanded.toggle()
         onToggleExpanded?()
+
+        NSAnimationContext.runAnimationGroup { [weak self] context in
+            guard let self else { return }
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+
+            self.subtaskStack?.animator().isHidden = !self.isExpanded
+            self.chevronButton?.animator().frameCenterRotation = self.isExpanded ? 0 : -90
+            self.window?.contentView?.layoutSubtreeIfNeeded()
+        }
     }
 
     @objc
@@ -728,7 +755,7 @@ private final class SubtaskRowView: NSView {
         checkbox.translatesAutoresizingMaskIntoConstraints = false
         checkbox.setButtonType(.switch)
         checkbox.contentTintColor = NSColor.taskAccentText
-        checkbox.controlSize = .mini
+        checkbox.controlSize = .small
         return checkbox
     }()
 
@@ -795,14 +822,14 @@ private final class SubtaskRowView: NSView {
         addSubview(rowStack)
 
         NSLayoutConstraint.activate([
-            checkbox.widthAnchor.constraint(equalToConstant: 14),
-            checkbox.heightAnchor.constraint(equalToConstant: 14),
+            checkbox.widthAnchor.constraint(equalToConstant: 16),
+            checkbox.heightAnchor.constraint(equalToConstant: 16),
 
-            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 25),
+            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 27),
             rowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 22)
+            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 24)
         ])
 
         let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
@@ -1758,12 +1785,13 @@ final class ViewController: NSViewController {
     }
 
     private func toggleExpanded(taskID: String) {
+        // Just record the state for future re-renders; the row animates
+        // its own expansion in place.
         if collapsedTaskIDs.contains(taskID) {
             collapsedTaskIDs.remove(taskID)
         } else {
             collapsedTaskIDs.insert(taskID)
         }
-        render(tasks: store.tasks)
     }
 
     private func presentAddSubtaskDialog(taskID: String) {
