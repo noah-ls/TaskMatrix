@@ -65,24 +65,34 @@ final class ViewController: NSViewController {
         titleStack.alignment = .leading
         titleStack.spacing = 1
 
-        let shortcutHint = NSTextField(labelWithString: "⌘N")
-        shortcutHint.translatesAutoresizingMaskIntoConstraints = false
-        shortcutHint.font = .systemFont(ofSize: 12, weight: .semibold)
-        shortcutHint.textColor = NSColor.taskMuted
+        let addTaskButton = PillButton(
+            title: "+ New Task",
+            shortcutHint: "⌘N",
+            target: self,
+            action: #selector(handleAddTaskAction(_:))
+        )
+        addTaskButton.toolTip = "New Task (⌘N)"
 
-        let addTaskButton = PillButton(title: "+ New Task", target: self, action: #selector(handleAddTaskAction(_:)))
-        let statsButton = PillButton(title: "Statistics", style: .subtle, target: self, action: #selector(handleShowStats(_:)))
+        let statsIcon = NSImage(systemSymbolName: "chart.bar.fill", accessibilityDescription: "Statistics")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .bold))
+        let statsButton = PillButton(
+            title: "Statistics",
+            icon: statsIcon,
+            style: .outline,
+            target: self,
+            action: #selector(handleShowStats(_:))
+        )
 
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerRow = NSStackView(views: [titleStack, headerSpacer, statsButton, shortcutHint, addTaskButton])
+        let headerRow = NSStackView(views: [titleStack, headerSpacer, statsButton, addTaskButton])
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
-        headerRow.spacing = 12
+        headerRow.spacing = 10
 
         // Matrix — a true 2x2 grid; rows pinned to full width so columns align.
         let topRow = NSStackView()

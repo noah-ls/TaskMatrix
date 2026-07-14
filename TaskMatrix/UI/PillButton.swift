@@ -5,10 +5,12 @@ final class PillButton: NSButton {
     enum Style {
         case primary
         case subtle
+        case outline
     }
 
     private var trackingAreaRef: NSTrackingArea?
     private var titleColor: NSColor = .taskAccentText
+    private var shortcutHint: String?
 
     override var isEnabled: Bool {
         didSet {
@@ -16,10 +18,18 @@ final class PillButton: NSButton {
         }
     }
 
-    init(title: String, style: Style = .primary, target: AnyObject?, action: Selector?) {
+    init(
+        title: String,
+        icon: NSImage? = nil,
+        shortcutHint: String? = nil,
+        style: Style = .primary,
+        target: AnyObject?,
+        action: Selector?
+    ) {
         super.init(frame: .zero)
         self.target = target
         self.action = action
+        self.shortcutHint = shortcutHint
 
         translatesAutoresizingMaskIntoConstraints = false
         isBordered = false
@@ -35,23 +45,47 @@ final class PillButton: NSButton {
         case .subtle:
             backgroundColor = NSColor.taskInk.withAlphaComponent(0.06)
             textColor = .taskInk
+        case .outline:
+            backgroundColor = .taskSurface
+            textColor = .taskInk
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor.taskRing.cgColor
         }
 
         layer?.backgroundColor = backgroundColor.cgColor
         titleColor = textColor
+
+        if let icon {
+            image = icon
+            imagePosition = .imageLeading
+            contentTintColor = textColor
+        }
+
         updateTitle(title)
 
         heightAnchor.constraint(equalToConstant: 36).isActive = true
     }
 
     func updateTitle(_ title: String) {
-        attributedTitle = NSAttributedString(
+        let attributed = NSMutableAttributedString(
             string: title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 14, weight: .bold),
                 .foregroundColor: titleColor
             ]
         )
+
+        if let shortcutHint {
+            attributed.append(NSAttributedString(
+                string: "  \(shortcutHint)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .bold),
+                    .foregroundColor: titleColor.withAlphaComponent(0.55)
+                ]
+            ))
+        }
+
+        attributedTitle = attributed
         invalidateIntrinsicContentSize()
     }
 
