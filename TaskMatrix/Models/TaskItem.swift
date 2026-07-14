@@ -14,6 +14,8 @@ struct TaskItem: Codable, Equatable {
     let createdAt: Date
     /// Date-only deadline (start of day); nil when no due date is set.
     var dueDate: Date?
+    /// When the task was checked off; nil while it is open.
+    var completedAt: Date?
     var subtasks: [SubTask]
 
     init(
@@ -23,6 +25,7 @@ struct TaskItem: Codable, Equatable {
         isCompleted: Bool,
         createdAt: Date,
         dueDate: Date? = nil,
+        completedAt: Date? = nil,
         subtasks: [SubTask] = []
     ) {
         self.id = id
@@ -31,6 +34,7 @@ struct TaskItem: Codable, Equatable {
         self.isCompleted = isCompleted
         self.createdAt = createdAt
         self.dueDate = dueDate
+        self.completedAt = completedAt
         self.subtasks = subtasks
     }
 
@@ -43,6 +47,7 @@ struct TaskItem: Codable, Equatable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         // Older saves predate these fields; default gracefully.
         dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         subtasks = try container.decodeIfPresent([SubTask].self, forKey: .subtasks) ?? []
     }
 }

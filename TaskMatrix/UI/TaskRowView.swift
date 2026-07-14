@@ -27,6 +27,8 @@ final class TaskRowView: NSView {
     private let progressLabel = NSTextField(labelWithString: "")
     private let dueLabel = NSTextField(labelWithString: "")
     private let dueBadge = NSView()
+    private let completedLabel = NSTextField(labelWithString: "")
+    private let completedBadge = NSView()
     private lazy var completeCheckbox: NSButton = {
         let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(handleCheckboxChange(_:)))
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -182,6 +184,27 @@ final class TaskRowView: NSView {
 
         var headerViews: [NSView] = [completeCheckbox, titleLabel, headerSpacer]
 
+        if task.isCompleted, task.completedAt != nil {
+            completedLabel.translatesAutoresizingMaskIntoConstraints = false
+            completedLabel.font = .systemFont(ofSize: 10.5, weight: .bold)
+            completedLabel.textColor = NSColor.taskAccentText.withAlphaComponent(0.75)
+
+            completedBadge.translatesAutoresizingMaskIntoConstraints = false
+            completedBadge.wantsLayer = true
+            completedBadge.layer?.cornerRadius = 9
+            completedBadge.layer?.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.25).cgColor
+            completedBadge.addSubview(completedLabel)
+
+            NSLayoutConstraint.activate([
+                completedLabel.leadingAnchor.constraint(equalTo: completedBadge.leadingAnchor, constant: 8),
+                completedLabel.trailingAnchor.constraint(equalTo: completedBadge.trailingAnchor, constant: -8),
+                completedLabel.topAnchor.constraint(equalTo: completedBadge.topAnchor, constant: 3),
+                completedLabel.bottomAnchor.constraint(equalTo: completedBadge.bottomAnchor, constant: -3)
+            ])
+
+            headerViews.append(completedBadge)
+        }
+
         if task.dueDate != nil {
             dueLabel.translatesAutoresizingMaskIntoConstraints = false
             dueLabel.font = .systemFont(ofSize: 10.5, weight: .bold)
@@ -288,6 +311,10 @@ final class TaskRowView: NSView {
         if !task.subtasks.isEmpty {
             let completedCount = task.subtasks.filter(\.isCompleted).count
             progressLabel.stringValue = "\(completedCount)/\(task.subtasks.count)"
+        }
+
+        if task.isCompleted, let completedAt = task.completedAt {
+            completedLabel.stringValue = "Done \(DueDateFormatting.shortLabel(for: completedAt))"
         }
 
         if let dueDate = task.dueDate {

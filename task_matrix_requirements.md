@@ -86,6 +86,7 @@ Task {
   isCompleted: Bool
   createdAt: Date
   dueDate: Date?          // date-only deadline, unset by default
+  completedAt: Date?      // set when checked off, cleared when reopened
   subtasks: [SubTask]
 }
 

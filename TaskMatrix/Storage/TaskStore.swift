@@ -62,6 +62,7 @@ final class TaskStore {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
 
         tasks[index].isCompleted = isCompleted
+        tasks[index].completedAt = isCompleted ? Date() : nil
         for subIndex in tasks[index].subtasks.indices {
             tasks[index].subtasks[subIndex].isCompleted = isCompleted
         }
