@@ -76,12 +76,46 @@ private enum Quadrant: String, CaseIterable, Codable {
     }
 }
 
+private struct SubTask: Codable, Equatable {
+    let id: String
+    var title: String
+    var isCompleted: Bool
+}
+
 private struct TaskItem: Codable, Equatable {
     let id: String
     var title: String
     var quadrant: Quadrant
     var isCompleted: Bool
     let createdAt: Date
+    var subtasks: [SubTask]
+
+    init(
+        id: String,
+        title: String,
+        quadrant: Quadrant,
+        isCompleted: Bool,
+        createdAt: Date,
+        subtasks: [SubTask] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.quadrant = quadrant
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+        self.subtasks = subtasks
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        quadrant = try container.decode(Quadrant.self, forKey: .quadrant)
+        isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        // Older saves predate subtasks; default to none.
+        subtasks = try container.decodeIfPresent([SubTask].self, forKey: .subtasks) ?? []
+    }
 }
 
 private final class TaskStore {
@@ -138,6 +172,9 @@ private final class TaskStore {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
 
         tasks[index].isCompleted = isCompleted
+        for subIndex in tasks[index].subtasks.indices {
+            tasks[index].subtasks[subIndex].isCompleted = isCompleted
+        }
         persistAndNotify()
     }
 
@@ -145,6 +182,49 @@ private final class TaskStore {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
 
         tasks.remove(at: index)
+        persistAndNotify()
+    }
+
+    func addSubtask(taskID: String, title: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
+
+        tasks[index].subtasks.append(
+            SubTask(id: UUID().uuidString, title: trimmedTitle, isCompleted: false)
+        )
+        persistAndNotify()
+    }
+
+    func updateSubtaskTitle(taskID: String, subtaskID: String, newTitle: String) {
+        let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }),
+              let subIndex = tasks[index].subtasks.firstIndex(where: { $0.id == subtaskID }) else {
+            return
+        }
+
+        tasks[index].subtasks[subIndex].title = trimmedTitle
+        persistAndNotify()
+    }
+
+    func setSubtaskCompleted(taskID: String, subtaskID: String, isCompleted: Bool) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }),
+              let subIndex = tasks[index].subtasks.firstIndex(where: { $0.id == subtaskID }) else {
+            return
+        }
+
+        tasks[index].subtasks[subIndex].isCompleted = isCompleted
+        persistAndNotify()
+    }
+
+    func deleteSubtask(taskID: String, subtaskID: String) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }),
+              let subIndex = tasks[index].subtasks.firstIndex(where: { $0.id == subtaskID }) else {
+            return
+        }
+
+        tasks[index].subtasks.remove(at: subIndex)
         persistAndNotify()
     }
 
@@ -311,13 +391,21 @@ private final class TaskRowView: NSView {
     var onMoveRequested: ((Quadrant) -> Void)?
     var onDeleteRequested: (() -> Void)?
     var onSelectRequested: (() -> Void)?
+    var onAddSubtaskRequested: (() -> Void)?
+    var onToggleSubtask: ((String, Bool) -> Void)?
+    var onEditSubtask: ((String) -> Void)?
+    var onDeleteSubtask: ((String) -> Void)?
+    var onToggleExpanded: (() -> Void)?
 
     private let task: TaskItem
     private let isSelected: Bool
+    private let isExpanded: Bool
     private var isHovering = false
     private var trackingAreaRef: NSTrackingArea?
+    private var subtaskRows: [SubtaskRowView] = []
 
     private let titleLabel = NSTextField(labelWithString: "")
+    private let progressLabel = NSTextField(labelWithString: "")
     private lazy var completeCheckbox: NSButton = {
         let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(handleCheckboxChange(_:)))
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -327,9 +415,10 @@ private final class TaskRowView: NSView {
         return checkbox
     }()
 
-    init(task: TaskItem, isSelected: Bool) {
+    init(task: TaskItem, isSelected: Bool, isExpanded: Bool) {
         self.task = task
         self.isSelected = isSelected
+        self.isExpanded = isExpanded
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setupUI()
@@ -400,6 +489,11 @@ private final class TaskRowView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu(title: "Task")
 
+        let addSubtaskItem = NSMenuItem(title: "Add Subtask…", action: #selector(handleAddSubtask(_:)), keyEquivalent: "")
+        addSubtaskItem.target = self
+        menu.addItem(addSubtaskItem)
+        menu.addItem(.separator())
+
         let moveMenuItem = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
         let moveMenu = NSMenu(title: "Move to")
 
@@ -434,24 +528,84 @@ private final class TaskRowView: NSView {
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
 
-        let rowStack = NSStackView(views: [completeCheckbox, titleLabel])
-        rowStack.translatesAutoresizingMaskIntoConstraints = false
-        rowStack.orientation = .horizontal
-        rowStack.alignment = .centerY
-        rowStack.spacing = 9
+        let headerSpacer = NSView()
+        headerSpacer.translatesAutoresizingMaskIntoConstraints = false
+        headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        addSubview(rowStack)
+        var headerViews: [NSView] = [completeCheckbox, titleLabel, headerSpacer]
+
+        if !task.subtasks.isEmpty {
+            progressLabel.translatesAutoresizingMaskIntoConstraints = false
+            progressLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+            progressLabel.textColor = NSColor.taskMuted
+            headerViews.append(progressLabel)
+
+            let chevron = NSButton(title: "", target: self, action: #selector(handleToggleExpanded(_:)))
+            chevron.translatesAutoresizingMaskIntoConstraints = false
+            chevron.isBordered = false
+            chevron.imagePosition = .imageOnly
+            chevron.image = NSImage(
+                systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
+                accessibilityDescription: isExpanded ? "Collapse subtasks" : "Expand subtasks"
+            )
+            chevron.contentTintColor = NSColor.taskMuted
+            headerViews.append(chevron)
+        }
+
+        let headerRow = NSStackView(views: headerViews)
+        headerRow.translatesAutoresizingMaskIntoConstraints = false
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .centerY
+        headerRow.spacing = 9
+
+        let contentStack = NSStackView(views: [headerRow])
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 6
+
+        addSubview(contentStack)
 
         NSLayoutConstraint.activate([
             completeCheckbox.widthAnchor.constraint(equalToConstant: 16),
             completeCheckbox.heightAnchor.constraint(equalToConstant: 16),
 
-            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
-            rowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -11),
-            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 9),
-            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 38)
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -11),
+            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 9),
+            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
+
+            headerRow.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 20)
         ])
+
+        if isExpanded, !task.subtasks.isEmpty {
+            let subtaskStack = NSStackView()
+            subtaskStack.translatesAutoresizingMaskIntoConstraints = false
+            subtaskStack.orientation = .vertical
+            subtaskStack.alignment = .leading
+            subtaskStack.spacing = 3
+
+            for subtask in task.subtasks {
+                let row = SubtaskRowView(subtask: subtask)
+                row.onToggle = { [weak self] isCompleted in
+                    self?.onToggleSubtask?(subtask.id, isCompleted)
+                }
+                row.onEditRequested = { [weak self] in
+                    self?.onEditSubtask?(subtask.id)
+                }
+                row.onDeleteRequested = { [weak self] in
+                    self?.onDeleteSubtask?(subtask.id)
+                }
+                subtaskRows.append(row)
+                subtaskStack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: subtaskStack.widthAnchor).isActive = true
+            }
+
+            contentStack.addArrangedSubview(subtaskStack)
+            subtaskStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
         doubleClickRecognizer.numberOfClicksRequired = 2
@@ -460,6 +614,11 @@ private final class TaskRowView: NSView {
 
     private func updateAppearance() {
         completeCheckbox.state = task.isCompleted ? .on : .off
+
+        if !task.subtasks.isEmpty {
+            let completedCount = task.subtasks.filter(\.isCompleted).count
+            progressLabel.stringValue = "\(completedCount)/\(task.subtasks.count)"
+        }
 
         if task.isCompleted {
             titleLabel.attributedStringValue = NSAttributedString(
@@ -511,7 +670,27 @@ private final class TaskRowView: NSView {
     @objc
     private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
         guard recognizer.state == .ended else { return }
+
+        // A double-click inside a subtask row is handled by that row's own
+        // recognizer; don't open the parent editor on top of it.
+        for row in subtaskRows {
+            let location = recognizer.location(in: row)
+            if row.bounds.contains(location) {
+                return
+            }
+        }
+
         onEditRequested?()
+    }
+
+    @objc
+    private func handleToggleExpanded(_ sender: NSButton) {
+        onToggleExpanded?()
+    }
+
+    @objc
+    private func handleAddSubtask(_ sender: NSMenuItem) {
+        onAddSubtaskRequested?()
     }
 
     @objc
@@ -534,6 +713,137 @@ extension TaskRowView: NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         context == .withinApplication ? .move : []
     }
+}
+
+/// One indented subtask line inside a task row card.
+private final class SubtaskRowView: NSView {
+    var onToggle: ((Bool) -> Void)?
+    var onEditRequested: (() -> Void)?
+    var onDeleteRequested: (() -> Void)?
+
+    private let subtask: SubTask
+    private let titleLabel = NSTextField(labelWithString: "")
+    private lazy var checkbox: NSButton = {
+        let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(handleCheckboxChange(_:)))
+        checkbox.translatesAutoresizingMaskIntoConstraints = false
+        checkbox.setButtonType(.switch)
+        checkbox.contentTintColor = NSColor.taskAccentText
+        checkbox.controlSize = .mini
+        return checkbox
+    }()
+
+    init(subtask: SubTask) {
+        self.subtask = subtask
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setupUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu(title: "Subtask")
+
+        let renameItem = NSMenuItem(title: "Rename…", action: #selector(handleRename(_:)), keyEquivalent: "")
+        renameItem.target = self
+        menu.addItem(renameItem)
+        menu.addItem(.separator())
+
+        let deleteItem = NSMenuItem(title: "Delete", action: #selector(handleDelete(_:)), keyEquivalent: "")
+        deleteItem.target = self
+        menu.addItem(deleteItem)
+
+        return menu
+    }
+
+    private func setupUI() {
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+
+        if subtask.isCompleted {
+            checkbox.state = .on
+            titleLabel.attributedStringValue = NSAttributedString(
+                string: subtask.title,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .regular),
+                    .foregroundColor: NSColor.taskMuted.withAlphaComponent(0.8),
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    .strikethroughColor: NSColor.taskMuted.withAlphaComponent(0.8)
+                ]
+            )
+        } else {
+            checkbox.state = .off
+            titleLabel.attributedStringValue = NSAttributedString(
+                string: subtask.title,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: NSColor.taskInk.withAlphaComponent(0.85)
+                ]
+            )
+        }
+
+        let rowStack = NSStackView(views: [checkbox, titleLabel])
+        rowStack.translatesAutoresizingMaskIntoConstraints = false
+        rowStack.orientation = .horizontal
+        rowStack.alignment = .centerY
+        rowStack.spacing = 7
+
+        addSubview(rowStack)
+
+        NSLayoutConstraint.activate([
+            checkbox.widthAnchor.constraint(equalToConstant: 14),
+            checkbox.heightAnchor.constraint(equalToConstant: 14),
+
+            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 25),
+            rowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 22)
+        ])
+
+        let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
+        doubleClickRecognizer.numberOfClicksRequired = 2
+        addGestureRecognizer(doubleClickRecognizer)
+    }
+
+    @objc
+    private func handleCheckboxChange(_ sender: NSButton) {
+        onToggle?(sender.state == .on)
+    }
+
+    @objc
+    private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
+        guard recognizer.state == .ended else { return }
+        onEditRequested?()
+    }
+
+    @objc
+    private func handleRename(_ sender: NSMenuItem) {
+        onEditRequested?()
+    }
+
+    @objc
+    private func handleDelete(_ sender: NSMenuItem) {
+        onDeleteRequested?()
+    }
+}
+
+/// Callbacks a task list needs, bundled so they thread through in one piece.
+private struct TaskListActions {
+    let toggleCompleted: (String, Bool) -> Void
+    let edit: (String) -> Void
+    let move: (String, Quadrant) -> Void
+    let delete: (String) -> Void
+    let select: (String) -> Void
+    let addSubtask: (String) -> Void
+    let toggleSubtask: (String, String, Bool) -> Void
+    let editSubtask: (String, String) -> Void
+    let deleteSubtask: (String, String) -> Void
+    let toggleExpanded: (String) -> Void
 }
 
 private final class QuadrantCardView: NSView {
@@ -583,11 +893,8 @@ private final class QuadrantCardView: NSView {
     func render(
         tasks: [TaskItem],
         selectedTaskID: String?,
-        onToggleCompleted: @escaping (String, Bool) -> Void,
-        onEditRequested: @escaping (String) -> Void,
-        onMoveRequested: @escaping (String, Quadrant) -> Void,
-        onDeleteRequested: @escaping (String) -> Void,
-        onSelectRequested: @escaping (String) -> Void
+        collapsedTaskIDs: Set<String>,
+        actions: TaskListActions
     ) {
         listStack.arrangedSubviews.forEach { subview in
             listStack.removeArrangedSubview(subview)
@@ -606,21 +913,40 @@ private final class QuadrantCardView: NSView {
         }
 
         for task in sortedTasks {
-            let row = TaskRowView(task: task, isSelected: task.id == selectedTaskID)
+            let row = TaskRowView(
+                task: task,
+                isSelected: task.id == selectedTaskID,
+                isExpanded: !collapsedTaskIDs.contains(task.id)
+            )
             row.onToggleCompleted = { isCompleted in
-                onToggleCompleted(task.id, isCompleted)
+                actions.toggleCompleted(task.id, isCompleted)
             }
             row.onEditRequested = {
-                onEditRequested(task.id)
+                actions.edit(task.id)
             }
             row.onMoveRequested = { destination in
-                onMoveRequested(task.id, destination)
+                actions.move(task.id, destination)
             }
             row.onDeleteRequested = {
-                onDeleteRequested(task.id)
+                actions.delete(task.id)
             }
             row.onSelectRequested = {
-                onSelectRequested(task.id)
+                actions.select(task.id)
+            }
+            row.onAddSubtaskRequested = {
+                actions.addSubtask(task.id)
+            }
+            row.onToggleSubtask = { subtaskID, isCompleted in
+                actions.toggleSubtask(task.id, subtaskID, isCompleted)
+            }
+            row.onEditSubtask = { subtaskID in
+                actions.editSubtask(task.id, subtaskID)
+            }
+            row.onDeleteSubtask = { subtaskID in
+                actions.deleteSubtask(task.id, subtaskID)
+            }
+            row.onToggleExpanded = {
+                actions.toggleExpanded(task.id)
             }
             listStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: listStack.widthAnchor).isActive = true
@@ -951,6 +1277,7 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
     enum Mode {
         case create(Quadrant)
         case edit(TaskItem)
+        case subtask(parentTitle: String, existing: SubTask?)
     }
 
     var onSubmit: ((String, Quadrant) -> Void)?
@@ -958,6 +1285,7 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
     private let mode: Mode
     private var selectedQuadrant: Quadrant
     private var optionViews: [QuadrantOptionView] = []
+    private let showsQuadrantPicker: Bool
 
     private let titleField = NSTextField()
     private let pickerView = QuadrantPickerView()
@@ -968,8 +1296,13 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         switch mode {
         case .create(let quadrant):
             selectedQuadrant = quadrant
+            showsQuadrantPicker = true
         case .edit(let task):
             selectedQuadrant = task.quadrant
+            showsQuadrantPicker = true
+        case .subtask:
+            selectedQuadrant = .q1   // unused; subtasks live inside their parent
+            showsQuadrantPicker = false
         }
         super.init(nibName: nil, bundle: nil)
     }
@@ -984,28 +1317,47 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.taskCanvas.cgColor
 
-        let isCreate: Bool
-        if case .create = mode { isCreate = true } else { isCreate = false }
+        let heading: String
+        let subheading: String
+        let submitTitle: String
+        var initialTitle = ""
 
-        let headingLabel = NSTextField(labelWithString: isCreate ? "New Task" : "Edit Task")
+        switch mode {
+        case .create:
+            heading = "New Task"
+            subheading = "Give it a clear title and pick where it belongs."
+            submitTitle = "Create Task"
+        case .edit(let task):
+            heading = "Edit Task"
+            subheading = "Update the title or move it to another quadrant."
+            submitTitle = "Save Changes"
+            initialTitle = task.title
+        case .subtask(let parentTitle, let existing):
+            heading = existing == nil ? "New Subtask" : "Edit Subtask"
+            subheading = "for \u{201C}\(parentTitle)\u{201D}"
+            submitTitle = existing == nil ? "Add Subtask" : "Save Changes"
+            initialTitle = existing?.title ?? ""
+        }
+
+        let headingLabel = NSTextField(labelWithString: heading)
         headingLabel.translatesAutoresizingMaskIntoConstraints = false
         headingLabel.font = .systemFont(ofSize: 17, weight: .black)
         headingLabel.textColor = NSColor.taskInk
 
-        let subheadingLabel = NSTextField(labelWithString: "Give it a clear title and pick where it belongs.")
+        let subheadingLabel = NSTextField(labelWithString: subheading)
         subheadingLabel.translatesAutoresizingMaskIntoConstraints = false
         subheadingLabel.font = .systemFont(ofSize: 12, weight: .medium)
         subheadingLabel.textColor = NSColor.taskMuted
+        subheadingLabel.lineBreakMode = .byTruncatingTail
+        subheadingLabel.maximumNumberOfLines = 1
 
         titleField.translatesAutoresizingMaskIntoConstraints = false
-        titleField.placeholderString = "Task title"
+        titleField.placeholderString = showsQuadrantPicker ? "Task title" : "Subtask title"
         titleField.font = .systemFont(ofSize: 14, weight: .medium)
         titleField.bezelStyle = .roundedBezel
         titleField.controlSize = .large
         titleField.delegate = self
-        if case .edit(let task) = mode {
-            titleField.stringValue = task.title
-        }
+        titleField.stringValue = initialTitle
 
         let quadrantLabel = NSTextField(labelWithString: "QUADRANT")
         quadrantLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1065,7 +1417,7 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         cancelButton.keyEquivalent = "\u{1b}"
 
         let submit = PillButton(
-            title: isCreate ? "Create Task" : "Save Changes",
+            title: submitTitle,
             target: self,
             action: #selector(handleSubmit(_:))
         )
@@ -1086,8 +1438,10 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         view.addSubview(headingLabel)
         view.addSubview(subheadingLabel)
         view.addSubview(titleField)
-        view.addSubview(quadrantLabel)
-        view.addSubview(pickerView)
+        if showsQuadrantPicker {
+            view.addSubview(quadrantLabel)
+            view.addSubview(pickerView)
+        }
         view.addSubview(buttonRow)
 
         NSLayoutConstraint.activate([
@@ -1097,32 +1451,40 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
             headingLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
 
             subheadingLabel.leadingAnchor.constraint(equalTo: headingLabel.leadingAnchor),
+            subheadingLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
             subheadingLabel.topAnchor.constraint(equalTo: headingLabel.bottomAnchor, constant: 2),
 
             titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             titleField.topAnchor.constraint(equalTo: subheadingLabel.bottomAnchor, constant: 14),
 
-            quadrantLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            quadrantLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 16),
-
-            pickerView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 15),
-            pickerView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -15),
-            pickerView.topAnchor.constraint(equalTo: quadrantLabel.bottomAnchor, constant: 3),
-
-            optionsStack.leadingAnchor.constraint(equalTo: pickerView.leadingAnchor, constant: 5),
-            optionsStack.trailingAnchor.constraint(equalTo: pickerView.trailingAnchor, constant: -5),
-            optionsStack.topAnchor.constraint(equalTo: pickerView.topAnchor, constant: 5),
-            optionsStack.bottomAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: -5),
-
-            optionTopRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
-            optionBottomRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
-
             buttonRow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             buttonRow.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            buttonRow.topAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: 13),
             buttonRow.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -18)
         ])
+
+        if showsQuadrantPicker {
+            NSLayoutConstraint.activate([
+                quadrantLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                quadrantLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 16),
+
+                pickerView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 15),
+                pickerView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -15),
+                pickerView.topAnchor.constraint(equalTo: quadrantLabel.bottomAnchor, constant: 3),
+
+                optionsStack.leadingAnchor.constraint(equalTo: pickerView.leadingAnchor, constant: 5),
+                optionsStack.trailingAnchor.constraint(equalTo: pickerView.trailingAnchor, constant: -5),
+                optionsStack.topAnchor.constraint(equalTo: pickerView.topAnchor, constant: 5),
+                optionsStack.bottomAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: -5),
+
+                optionTopRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
+                optionBottomRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
+
+                buttonRow.topAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: 13)
+            ])
+        } else {
+            buttonRow.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 18).isActive = true
+        }
 
         selectQuadrant(selectedQuadrant)
         refreshSubmitEnabled()
@@ -1133,9 +1495,11 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
 
         // Tab from the title focuses the picker; keep AppKit from
         // recalculating the loop and bypassing it.
-        view.window?.autorecalculatesKeyViewLoop = false
-        titleField.nextKeyView = pickerView
-        pickerView.nextKeyView = titleField
+        if showsQuadrantPicker {
+            view.window?.autorecalculatesKeyViewLoop = false
+            titleField.nextKeyView = pickerView
+            pickerView.nextKeyView = titleField
+        }
 
         view.window?.makeFirstResponder(titleField)
     }
@@ -1208,6 +1572,7 @@ final class ViewController: NSViewController {
     private var quadrantViews: [Quadrant: QuadrantCardView] = [:]
     private var didInstallCommandN = false
     private var selectedTaskID: String?
+    private var collapsedTaskIDs: Set<String> = []
 
     override func loadView() {
         let rootView = MatrixRootView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
@@ -1348,28 +1713,81 @@ final class ViewController: NSViewController {
     }
 
     private func render(tasks: [TaskItem]) {
+        let actions = TaskListActions(
+            toggleCompleted: { [weak self] taskID, isCompleted in
+                self?.store.setTaskCompleted(id: taskID, isCompleted: isCompleted)
+            },
+            edit: { [weak self] taskID in
+                self?.presentEditTaskDialog(taskID: taskID)
+            },
+            move: { [weak self] taskID, destination in
+                self?.store.moveTask(id: taskID, to: destination)
+            },
+            delete: { [weak self] taskID in
+                self?.store.deleteTask(id: taskID)
+            },
+            select: { [weak self] taskID in
+                self?.selectTask(taskID)
+            },
+            addSubtask: { [weak self] taskID in
+                self?.presentAddSubtaskDialog(taskID: taskID)
+            },
+            toggleSubtask: { [weak self] taskID, subtaskID, isCompleted in
+                self?.store.setSubtaskCompleted(taskID: taskID, subtaskID: subtaskID, isCompleted: isCompleted)
+            },
+            editSubtask: { [weak self] taskID, subtaskID in
+                self?.presentEditSubtaskDialog(taskID: taskID, subtaskID: subtaskID)
+            },
+            deleteSubtask: { [weak self] taskID, subtaskID in
+                self?.store.deleteSubtask(taskID: taskID, subtaskID: subtaskID)
+            },
+            toggleExpanded: { [weak self] taskID in
+                self?.toggleExpanded(taskID: taskID)
+            }
+        )
+
         for quadrant in Quadrant.allCases {
             let quadrantTasks = tasks.filter { $0.quadrant == quadrant }
             quadrantViews[quadrant]?.render(
                 tasks: quadrantTasks,
                 selectedTaskID: selectedTaskID,
-                onToggleCompleted: { [weak self] taskID, isCompleted in
-                    self?.store.setTaskCompleted(id: taskID, isCompleted: isCompleted)
-                },
-                onEditRequested: { [weak self] taskID in
-                    self?.presentEditTaskDialog(taskID: taskID)
-                },
-                onMoveRequested: { [weak self] taskID, destination in
-                    self?.store.moveTask(id: taskID, to: destination)
-                },
-                onDeleteRequested: { [weak self] taskID in
-                    self?.store.deleteTask(id: taskID)
-                },
-                onSelectRequested: { [weak self] taskID in
-                    self?.selectTask(taskID)
-                }
+                collapsedTaskIDs: collapsedTaskIDs,
+                actions: actions
             )
         }
+    }
+
+    private func toggleExpanded(taskID: String) {
+        if collapsedTaskIDs.contains(taskID) {
+            collapsedTaskIDs.remove(taskID)
+        } else {
+            collapsedTaskIDs.insert(taskID)
+        }
+        render(tasks: store.tasks)
+    }
+
+    private func presentAddSubtaskDialog(taskID: String) {
+        guard let task = store.task(id: taskID) else { return }
+
+        let form = TaskFormViewController(mode: .subtask(parentTitle: task.title, existing: nil))
+        form.onSubmit = { [weak self] title, _ in
+            self?.collapsedTaskIDs.remove(taskID)
+            self?.store.addSubtask(taskID: taskID, title: title)
+        }
+        presentAsSheet(form)
+    }
+
+    private func presentEditSubtaskDialog(taskID: String, subtaskID: String) {
+        guard let task = store.task(id: taskID),
+              let subtask = task.subtasks.first(where: { $0.id == subtaskID }) else {
+            return
+        }
+
+        let form = TaskFormViewController(mode: .subtask(parentTitle: task.title, existing: subtask))
+        form.onSubmit = { [weak self] title, _ in
+            self?.store.updateSubtaskTitle(taskID: taskID, subtaskID: subtaskID, newTitle: title)
+        }
+        presentAsSheet(form)
     }
 
     private func selectTask(_ taskID: String) {

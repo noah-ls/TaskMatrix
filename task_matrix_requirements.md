@@ -85,6 +85,13 @@ Task {
   quadrant: Q1 | Q2 | Q3 | Q4
   isCompleted: Bool
   createdAt: Date
+  subtasks: [SubTask]
+}
+
+SubTask {
+  id: String
+  title: String
+  isCompleted: Bool
 }
 ```
 

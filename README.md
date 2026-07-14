@@ -16,6 +16,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **Edit in place** — double-click a task to rename it
 - **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
 - **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
+- **Subtasks** — right-click a task → *Add Subtask…* to break it into steps; check steps off individually (the parent shows `done/total` progress), collapse/expand the list with the chevron, and rename or delete via right-click. Completing the parent completes all its subtasks
 - **Auto-save** — every change is persisted immediately; no manual save
 
 ## Persistence
