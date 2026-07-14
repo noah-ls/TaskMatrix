@@ -402,7 +402,6 @@ private final class TaskRowView: NSView {
     private var isExpanded: Bool
     private var isHovering = false
     private var trackingAreaRef: NSTrackingArea?
-    private var subtaskRows: [SubtaskRowView] = []
     private var subtaskStack: NSStackView?
     private var chevronButton: NSButton?
 
@@ -462,7 +461,14 @@ private final class TaskRowView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        // Selection on the first click, edit on the second — branching on
+        // clickCount responds instantly, unlike a double-click gesture
+        // recognizer, which delays every single click by the double-click
+        // interval while it waits for a possible second click.
         onSelectRequested?()
+        if event.clickCount == 2 {
+            onEditRequested?()
+        }
         // No super call: the click must not bubble to the background,
         // which would immediately clear the selection it just made.
     }
@@ -607,7 +613,6 @@ private final class TaskRowView: NSView {
                 row.onDeleteRequested = { [weak self] in
                     self?.onDeleteSubtask?(subtask.id)
                 }
-                subtaskRows.append(row)
                 stack.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             }
@@ -617,10 +622,6 @@ private final class TaskRowView: NSView {
             stack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
             subtaskStack = stack
         }
-
-        let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
-        doubleClickRecognizer.numberOfClicksRequired = 2
-        addGestureRecognizer(doubleClickRecognizer)
     }
 
     private func updateAppearance() {
@@ -676,22 +677,6 @@ private final class TaskRowView: NSView {
     @objc
     private func handleCheckboxChange(_ sender: NSButton) {
         onToggleCompleted?(sender.state == .on)
-    }
-
-    @objc
-    private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
-        guard recognizer.state == .ended else { return }
-
-        // A double-click inside a subtask row is handled by that row's own
-        // recognizer; don't open the parent editor on top of it.
-        for row in subtaskRows where !row.isHiddenOrHasHiddenAncestor {
-            let location = recognizer.location(in: row)
-            if row.bounds.contains(location) {
-                return
-            }
-        }
-
-        onEditRequested?()
     }
 
     private static func chevronImage(expanded: Bool) -> NSImage? {
@@ -836,21 +821,22 @@ private final class SubtaskRowView: NSView {
             rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 24)
         ])
+    }
 
-        let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
-        doubleClickRecognizer.numberOfClicksRequired = 2
-        addGestureRecognizer(doubleClickRecognizer)
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            // Open the subtask editor and swallow the event so the parent
+            // row doesn't also open its own editor.
+            onEditRequested?()
+        } else {
+            // Single click bubbles up so the parent row gets selected.
+            super.mouseDown(with: event)
+        }
     }
 
     @objc
     private func handleCheckboxChange(_ sender: NSButton) {
         onToggle?(sender.state == .on)
-    }
-
-    @objc
-    private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
-        guard recognizer.state == .ended else { return }
-        onEditRequested?()
     }
 
     @objc
