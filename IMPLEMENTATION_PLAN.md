@@ -2,6 +2,10 @@
 
 Source requirements: [task_matrix_requirements.md](./task_matrix_requirements.md)
 
+> **Status (July 2026):** Milestones 1–3 and most of 5 are implemented in
+> `TaskMatrix/ViewController.swift`. Milestone 4 (drag and drop) is not yet
+> implemented — moving tasks currently works via the right-click context menu.
+
 ## 1. Goal and Scope
 
 Build a single-window macOS app for Eisenhower Matrix task management with local auto-save.
@@ -42,7 +46,7 @@ Validation and behavior rules:
 - Quadrant is required at create time
 - `id` generated once and never changes
 - `createdAt` set at creation only
-- Complete action either removes item immediately or marks complete and fades out (choose one behavior and keep consistent)
+- Complete action marks the task complete and fades it (task stays visible, sorted below active tasks, until deleted)
 
 ## 4. Milestone Plan
 
@@ -104,17 +108,18 @@ Acceptance:
 - No navigation beyond main screen
 - Drag and drop behavior remains stable
 
-## 5. Suggested File-Level Work Breakdown
+## 5. File-Level Layout (Actual)
 
-Potential implementation files:
-- `TaskMatrix/Models/Task.swift`
-- `TaskMatrix/Models/Quadrant.swift`
-- `TaskMatrix/Storage/TaskStore.swift`
-- `TaskMatrix/UI/MatrixViewController.swift` (or expand current `ViewController.swift`)
-- `TaskMatrix/UI/TaskRowView.swift`
-- `TaskMatrix/UI/AddTaskSheetController.swift`
+The MVP kept the minimal single-file structure. Everything lives in
+`TaskMatrix/ViewController.swift`:
 
-If keeping current minimal structure, start in `ViewController.swift`, then extract modules after milestone 2.
+- `Quadrant` enum and `TaskItem` model (Codable)
+- `TaskStore` (JSON load/save in Application Support, CRUD, change callback)
+- `TaskRowView`, `QuadrantCardView`, `HoverScaleButton` (UI)
+- `ViewController` (matrix layout, add/edit dialogs, `Cmd+N` wiring)
+
+Extracting into `Models/`, `Storage/`, and `UI/` modules remains an option if
+the file grows further.
 
 ## 6. Test Plan (Manual MVP)
 
@@ -139,13 +144,13 @@ If keeping current minimal structure, start in `ViewController.swift`, then extr
 
 ## 8. Definition of Done Checklist
 
-- [ ] Single window with 2x2 quadrant matrix
-- [ ] Add task via `+` and `Cmd+N`
-- [ ] Vertical task lists render correctly
-- [ ] Drag and drop between quadrants works reliably
-- [ ] Double-click edit title works
-- [ ] Right-click move and delete works
-- [ ] Complete task behavior works and is consistent
-- [ ] Local auto-save and reload works
-- [ ] No multi-page navigation added
-- [ ] End-to-end flow (create -> move -> complete) < 10 seconds
+- [x] Single window with 2x2 quadrant matrix
+- [x] Add task via `+` and `Cmd+N`
+- [x] Vertical task lists render correctly
+- [ ] Drag and drop between quadrants works reliably (not implemented; context-menu move is the current path)
+- [x] Double-click edit title works
+- [x] Right-click move and delete works
+- [x] Complete task behavior works and is consistent (fade + sort below active tasks)
+- [x] Local auto-save and reload works
+- [x] No multi-page navigation added
+- [ ] End-to-end flow (create -> move -> complete) < 10 seconds (pending manual validation)

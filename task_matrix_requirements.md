@@ -64,7 +64,7 @@ Users organize tasks into 4 quadrants based on **importance** and **urgency**.
 ### 3.5 Complete Task
 - Checkbox on task
 - On complete:
-  - Task fades out OR removed
+  - Task fades and sorts below active tasks (stays until deleted)
 
 ---
 
