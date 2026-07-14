@@ -296,10 +296,12 @@ private final class PillButton: NSButton {
 
     private func animateScale(to scale: CGFloat) {
         guard let layer else { return }
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        layer.position = center
-        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        layer.transform = CATransform3DMakeScale(scale, scale, 1)
+        // Scale around the center without touching anchorPoint/position —
+        // AppKit owns the layer geometry and moving it shifts the button.
+        var transform = CATransform3DMakeTranslation(bounds.midX, bounds.midY, 0)
+        transform = CATransform3DScale(transform, scale, scale, 1)
+        transform = CATransform3DTranslate(transform, -bounds.midX, -bounds.midY, 0)
+        layer.transform = transform
     }
 }
 
