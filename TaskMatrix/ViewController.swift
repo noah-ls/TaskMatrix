@@ -543,18 +543,14 @@ private final class TaskRowView: NSView {
             progressLabel.textColor = NSColor.taskMuted
             headerViews.append(progressLabel)
 
-            // One fixed-size, rotating chevron: swapping between the
-            // chevron.right/chevron.down symbols changes the button width
-            // and nudges the progress label sideways on every toggle.
+            // Fixed 24x24 button so the header never reflows on toggle;
+            // the symbol swap is safe inside that constant footprint.
             let chevron = NSButton(title: "", target: self, action: #selector(handleToggleExpanded(_:)))
             chevron.translatesAutoresizingMaskIntoConstraints = false
             chevron.isBordered = false
             chevron.imagePosition = .imageOnly
-            let symbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-            chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Toggle subtasks")?
-                .withSymbolConfiguration(symbolConfig)
+            chevron.image = Self.chevronImage(expanded: isExpanded)
             chevron.contentTintColor = NSColor.taskMuted
-            chevron.frameCenterRotation = isExpanded ? 0 : -90
             chevronButton = chevron
             headerViews.append(chevron)
         }
@@ -698,10 +694,20 @@ private final class TaskRowView: NSView {
         onEditRequested?()
     }
 
+    private static func chevronImage(expanded: Bool) -> NSImage? {
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        return NSImage(
+            systemSymbolName: expanded ? "chevron.down" : "chevron.right",
+            accessibilityDescription: expanded ? "Collapse subtasks" : "Expand subtasks"
+        )?.withSymbolConfiguration(symbolConfig)
+    }
+
     @objc
     private func handleToggleExpanded(_ sender: NSButton) {
         isExpanded.toggle()
         onToggleExpanded?()
+
+        chevronButton?.image = Self.chevronImage(expanded: isExpanded)
 
         NSAnimationContext.runAnimationGroup { [weak self] context in
             guard let self else { return }
@@ -710,7 +716,6 @@ private final class TaskRowView: NSView {
             context.allowsImplicitAnimation = true
 
             self.subtaskStack?.animator().isHidden = !self.isExpanded
-            self.chevronButton?.animator().frameCenterRotation = self.isExpanded ? 0 : -90
             self.window?.contentView?.layoutSubtreeIfNeeded()
         }
     }
