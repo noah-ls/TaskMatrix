@@ -889,6 +889,63 @@ private final class QuadrantOptionView: NSView {
     }
 }
 
+/// Focusable wrapper around the quadrant tiles. While focused, Tab cycles
+/// the selected quadrant and arrow keys move it; Shift+Tab leaves the picker.
+private final class QuadrantPickerView: NSView {
+    var onCycleSelection: ((Int) -> Void)?
+    var onFocusPrevious: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 13
+        layer?.borderWidth = 2
+        layer?.borderColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        layer?.borderColor = NSColor.taskAccentText.withAlphaComponent(0.35).cgColor
+        return super.becomeFirstResponder()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        layer?.borderColor = NSColor.clear.cgColor
+        return super.resignFirstResponder()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let tabKeyCode: UInt16 = 48
+        let leftArrow: UInt16 = 123
+        let rightArrow: UInt16 = 124
+        let downArrow: UInt16 = 125
+        let upArrow: UInt16 = 126
+
+        switch event.keyCode {
+        case tabKeyCode where event.modifierFlags.contains(.shift):
+            onFocusPrevious?()
+        case tabKeyCode, rightArrow, downArrow:
+            onCycleSelection?(1)
+        case leftArrow, upArrow:
+            onCycleSelection?(-1)
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+}
+
 /// Sheet used for both creating and editing a task, styled to match the matrix.
 private final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     enum Mode {
@@ -903,6 +960,7 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
     private var optionViews: [QuadrantOptionView] = []
 
     private let titleField = NSTextField()
+    private let pickerView = QuadrantPickerView()
     private var submitButton: PillButton?
 
     init(mode: Mode) {
@@ -989,6 +1047,15 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         optionsStack.alignment = .leading
         optionsStack.spacing = 8
 
+        pickerView.addSubview(optionsStack)
+        pickerView.onCycleSelection = { [weak self] delta in
+            self?.cycleQuadrant(by: delta)
+        }
+        pickerView.onFocusPrevious = { [weak self] in
+            guard let self else { return }
+            self.view.window?.makeFirstResponder(self.titleField)
+        }
+
         let cancelButton = PillButton(
             title: "Cancel",
             style: .subtle,
@@ -1020,7 +1087,7 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         view.addSubview(subheadingLabel)
         view.addSubview(titleField)
         view.addSubview(quadrantLabel)
-        view.addSubview(optionsStack)
+        view.addSubview(pickerView)
         view.addSubview(buttonRow)
 
         NSLayoutConstraint.activate([
@@ -1039,16 +1106,21 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
             quadrantLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             quadrantLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 16),
 
-            optionsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            optionsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            optionsStack.topAnchor.constraint(equalTo: quadrantLabel.bottomAnchor, constant: 8),
+            pickerView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 15),
+            pickerView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -15),
+            pickerView.topAnchor.constraint(equalTo: quadrantLabel.bottomAnchor, constant: 3),
+
+            optionsStack.leadingAnchor.constraint(equalTo: pickerView.leadingAnchor, constant: 5),
+            optionsStack.trailingAnchor.constraint(equalTo: pickerView.trailingAnchor, constant: -5),
+            optionsStack.topAnchor.constraint(equalTo: pickerView.topAnchor, constant: 5),
+            optionsStack.bottomAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: -5),
 
             optionTopRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
             optionBottomRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
 
             buttonRow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             buttonRow.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            buttonRow.topAnchor.constraint(equalTo: optionsStack.bottomAnchor, constant: 18),
+            buttonRow.topAnchor.constraint(equalTo: pickerView.bottomAnchor, constant: 13),
             buttonRow.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -18)
         ])
 
@@ -1058,6 +1130,13 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
 
     override func viewDidAppear() {
         super.viewDidAppear()
+
+        // Tab from the title focuses the picker; keep AppKit from
+        // recalculating the loop and bypassing it.
+        view.window?.autorecalculatesKeyViewLoop = false
+        titleField.nextKeyView = pickerView
+        pickerView.nextKeyView = titleField
+
         view.window?.makeFirstResponder(titleField)
     }
 
@@ -1070,6 +1149,13 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
         for option in optionViews {
             option.isChosen = option.quadrant == quadrant
         }
+    }
+
+    private func cycleQuadrant(by delta: Int) {
+        let all = Quadrant.allCases
+        guard let index = all.firstIndex(of: selectedQuadrant) else { return }
+        let next = (index + delta + all.count) % all.count
+        selectQuadrant(all[next])
     }
 
     private func refreshSubmitEnabled() {
