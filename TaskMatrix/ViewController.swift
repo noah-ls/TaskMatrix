@@ -489,16 +489,18 @@ private final class TaskRowView: NSView {
     private func refreshContainerStyle() {
         guard let layer else { return }
 
+        let accent = task.quadrant.accentColor
+
         if isSelected {
             layer.borderWidth = 2
-            layer.borderColor = NSColor.taskAccentText.withAlphaComponent(0.7).cgColor
-            layer.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.14).cgColor
+            layer.borderColor = accent.cgColor
+            layer.backgroundColor = NSColor.taskSurface.cgColor
             return
         }
 
         layer.borderWidth = 1
         layer.backgroundColor = NSColor.taskSurface.cgColor
-        layer.borderColor = (isHovering ? NSColor.taskAccent.withAlphaComponent(0.55) : NSColor.taskRing).cgColor
+        layer.borderColor = (isHovering ? accent.withAlphaComponent(0.45) : NSColor.taskRing).cgColor
     }
 
     @objc
@@ -536,6 +538,7 @@ extension TaskRowView: NSDraggingSource {
 
 private final class QuadrantCardView: NSView {
     var onTaskDropped: ((String) -> Void)?
+    var onAddRequested: (() -> Void)?
 
     private let listStack = NSStackView()
     private let emptyStateLabel = NSTextField(labelWithString: "No tasks — drag one here")
@@ -659,7 +662,22 @@ private final class QuadrantCardView: NSView {
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerRow = NSStackView(views: [dot, strategyLabel, headerSpacer, countBadge])
+        let addButton = NSButton(title: "", target: self, action: #selector(handleAddButton(_:)))
+        addButton.translatesAutoresizingMaskIntoConstraints = false
+        addButton.isBordered = false
+        addButton.wantsLayer = true
+        addButton.layer?.cornerRadius = 11
+        addButton.layer?.backgroundColor = quadrant.accentColor.withAlphaComponent(0.22).cgColor
+        addButton.attributedTitle = NSAttributedString(
+            string: "+",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 15, weight: .bold),
+                .foregroundColor: NSColor.taskInk.withAlphaComponent(0.75)
+            ]
+        )
+        addButton.toolTip = "Add task to \(quadrant.strategy)"
+
+        let headerRow = NSStackView(views: [dot, strategyLabel, headerSpacer, countBadge, addButton])
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
@@ -717,6 +735,9 @@ private final class QuadrantCardView: NSView {
             dot.widthAnchor.constraint(equalToConstant: 10),
             dot.heightAnchor.constraint(equalToConstant: 10),
 
+            addButton.widthAnchor.constraint(equalToConstant: 22),
+            addButton.heightAnchor.constraint(equalToConstant: 22),
+
             countLabel.leadingAnchor.constraint(equalTo: countBadge.leadingAnchor, constant: 9),
             countLabel.trailingAnchor.constraint(equalTo: countBadge.trailingAnchor, constant: -9),
             countLabel.topAnchor.constraint(equalTo: countBadge.topAnchor, constant: 3),
@@ -754,6 +775,11 @@ private final class QuadrantCardView: NSView {
             emptyStateLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
             emptyStateLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4)
         ])
+    }
+
+    @objc
+    private func handleAddButton(_ sender: NSButton) {
+        onAddRequested?()
     }
 
     private func setDropHighlight(_ isActive: Bool) {
@@ -866,7 +892,7 @@ private final class QuadrantOptionView: NSView {
 /// Sheet used for both creating and editing a task, styled to match the matrix.
 private final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     enum Mode {
-        case create
+        case create(Quadrant)
         case edit(TaskItem)
     }
 
@@ -882,8 +908,8 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
     init(mode: Mode) {
         self.mode = mode
         switch mode {
-        case .create:
-            selectedQuadrant = .q1
+        case .create(let quadrant):
+            selectedQuadrant = quadrant
         case .edit(let task):
             selectedQuadrant = task.quadrant
         }
@@ -1220,6 +1246,9 @@ final class ViewController: NSViewController {
         card.onTaskDropped = { [weak self] taskID in
             self?.store.moveTask(id: taskID, to: quadrant)
         }
+        card.onAddRequested = { [weak self] in
+            self?.presentAddTaskDialog(preselected: quadrant)
+        }
         quadrantViews[quadrant] = card
         return card
     }
@@ -1313,8 +1342,8 @@ final class ViewController: NSViewController {
         presentAddTaskDialog()
     }
 
-    private func presentAddTaskDialog() {
-        let form = TaskFormViewController(mode: .create)
+    private func presentAddTaskDialog(preselected: Quadrant = .q1) {
+        let form = TaskFormViewController(mode: .create(preselected))
         form.onSubmit = { [weak self] title, quadrant in
             self?.store.addTask(title: title, quadrant: quadrant)
         }
