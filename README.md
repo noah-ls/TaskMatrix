@@ -14,7 +14,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **Quick create** — add a task via the `+ New Task` button or `⌘N`, picking a title and quadrant
 - **2×2 matrix view** — all four quadrants visible at once, each with its own scrollable task list and task count
 - **Edit in place** — double-click a task to rename it
-- **Move between quadrants** — right-click a task → *Move to* any other quadrant
+- **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
 - **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom), right-click → *Delete* to remove
 - **Auto-save** — every change is persisted immediately; no manual save
 
@@ -59,11 +59,7 @@ TaskMatrix/
 
 The UI takes cues from Wise's design language (see [DESIGN.md](DESIGN.md)): a warm off-white canvas, lime-green accent with dark-green text, heavy black display type, pill-shaped buttons with scale-on-hover animation, and large rounded cards with subtle ring borders.
 
-## Roadmap
-
-Planned but not yet implemented:
-
-- Drag & drop to move tasks between quadrants (context-menu move works today)
+## Scope
 
 Explicitly out of scope for the MVP: sync, reminders, tags, AI, analytics.
 

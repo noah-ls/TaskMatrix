@@ -2,9 +2,9 @@
 
 Source requirements: [task_matrix_requirements.md](./task_matrix_requirements.md)
 
-> **Status (July 2026):** Milestones 1–3 and most of 5 are implemented in
-> `TaskMatrix/ViewController.swift`. Milestone 4 (drag and drop) is not yet
-> implemented — moving tasks currently works via the right-click context menu.
+> **Status (July 2026):** Milestones 1–4 and most of 5 are implemented in
+> `TaskMatrix/ViewController.swift`. Remaining: manual validation of the
+> end-to-end flow and drag-and-drop stress test (plan section 6).
 
 ## 1. Goal and Scope
 
@@ -147,7 +147,7 @@ the file grows further.
 - [x] Single window with 2x2 quadrant matrix
 - [x] Add task via `+` and `Cmd+N`
 - [x] Vertical task lists render correctly
-- [ ] Drag and drop between quadrants works reliably (not implemented; context-menu move is the current path)
+- [x] Drag and drop between quadrants works reliably (implemented; stress test per section 6 still pending)
 - [x] Double-click edit title works
 - [x] Right-click move and delete works
 - [x] Complete task behavior works and is consistent (fade + sort below active tasks)

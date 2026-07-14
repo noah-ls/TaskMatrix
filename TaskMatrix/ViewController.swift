@@ -1,5 +1,9 @@
 import Cocoa
 
+private extension NSPasteboard.PasteboardType {
+    static let taskID = NSPasteboard.PasteboardType("com.taskmatrix.task-id")
+}
+
 private enum Quadrant: String, CaseIterable, Codable {
     case q1
     case q2
@@ -295,6 +299,27 @@ private final class TaskRowView: NSView {
         refreshContainerStyle()
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setString(task.id, forType: .taskID)
+
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        draggingItem.setDraggingFrame(bounds, contents: draggingImage())
+
+        beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+
+    private func draggingImage() -> NSImage {
+        guard let rep = bitmapImageRepForCachingDisplay(in: bounds) else {
+            return NSImage(size: bounds.size)
+        }
+        cacheDisplay(in: bounds, to: rep)
+
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(rep)
+        return image
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu(title: "Task")
 
@@ -409,7 +434,15 @@ private final class TaskRowView: NSView {
     }
 }
 
+extension TaskRowView: NSDraggingSource {
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? .move : []
+    }
+}
+
 private final class QuadrantCardView: NSView {
+    var onTaskDropped: ((String) -> Void)?
+
     private let listStack = NSStackView()
     private let emptyStateLabel = NSTextField(labelWithString: "No tasks yet")
     private let taskCountLabel = NSTextField(labelWithString: "0 Tasks")
@@ -421,6 +454,33 @@ private final class QuadrantCardView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setupUI()
+        registerForDraggedTypes([.taskID])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.availableType(from: [.taskID]) != nil else { return [] }
+        setDropHighlight(true)
+        return .move
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        setDropHighlight(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        setDropHighlight(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        setDropHighlight(false)
+        guard let taskID = sender.draggingPasteboard.string(forType: .taskID) else { return false }
+        onTaskDropped?(taskID)
+        return true
+    }
+
+    private func setDropHighlight(_ isActive: Bool) {
+        layer?.borderWidth = isActive ? 2 : 1
+        layer?.borderColor = (isActive ? NSColor.taskAccent : NSColor.taskRing).cgColor
     }
 
     @available(*, unavailable)
@@ -703,14 +763,12 @@ final class ViewController: NSViewController {
         bottomRow.spacing = 18
 
         for quadrant in [Quadrant.q1, .q2] {
-            let card = QuadrantCardView(quadrant: quadrant)
-            quadrantViews[quadrant] = card
+            let card = makeQuadrantCard(for: quadrant)
             topRow.addArrangedSubview(card)
         }
 
         for quadrant in [Quadrant.q3, .q4] {
-            let card = QuadrantCardView(quadrant: quadrant)
-            quadrantViews[quadrant] = card
+            let card = makeQuadrantCard(for: quadrant)
             bottomRow.addArrangedSubview(card)
         }
 
@@ -763,6 +821,15 @@ final class ViewController: NSViewController {
             matrixContainer.leadingAnchor.constraint(equalTo: rootStack.leadingAnchor),
             matrixContainer.trailingAnchor.constraint(equalTo: rootStack.trailingAnchor)
         ])
+    }
+
+    private func makeQuadrantCard(for quadrant: Quadrant) -> QuadrantCardView {
+        let card = QuadrantCardView(quadrant: quadrant)
+        card.onTaskDropped = { [weak self] taskID in
+            self?.store.moveTask(id: taskID, to: quadrant)
+        }
+        quadrantViews[quadrant] = card
+        return card
     }
 
     private func installDecorativeBackground() {
