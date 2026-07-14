@@ -6,6 +6,8 @@ final class ViewController: NSViewController {
     private var didInstallCommandN = false
     private var selectedTaskID: String?
     private var collapsedTaskIDs: Set<String> = []
+    private var statsWindowController: NSWindowController?
+    private weak var statsViewController: StatsViewController?
 
     override func loadView() {
         let rootView = MatrixRootView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
@@ -69,13 +71,14 @@ final class ViewController: NSViewController {
         shortcutHint.textColor = NSColor.taskMuted
 
         let addTaskButton = PillButton(title: "+ New Task", target: self, action: #selector(handleAddTaskAction(_:)))
+        let statsButton = PillButton(title: "Statistics", style: .subtle, target: self, action: #selector(handleShowStats(_:)))
 
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerRow = NSStackView(views: [titleStack, headerSpacer, shortcutHint, addTaskButton])
+        let headerRow = NSStackView(views: [titleStack, headerSpacer, statsButton, shortcutHint, addTaskButton])
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
@@ -195,6 +198,9 @@ final class ViewController: NSViewController {
                 actions: actions
             )
         }
+
+        // Keep the stats page live while it's open.
+        statsViewController?.update(tasks: tasks)
     }
 
     // MARK: - Selection
@@ -267,6 +273,31 @@ final class ViewController: NSViewController {
     @objc
     private func handleAddTaskAction(_ sender: Any?) {
         presentAddTaskDialog()
+    }
+
+    // MARK: - Statistics
+
+    @objc
+    private func handleShowStats(_ sender: Any?) {
+        if let windowController = statsWindowController {
+            statsViewController?.update(tasks: store.tasks)
+            windowController.showWindow(nil)
+            windowController.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let statsController = StatsViewController()
+        let window = NSWindow(contentViewController: statsController)
+        window.title = "Statistics"
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        statsWindowController = windowController
+        statsViewController = statsController
+        statsController.update(tasks: store.tasks)
+        windowController.showWindow(nil)
     }
 
     // MARK: - Sheets

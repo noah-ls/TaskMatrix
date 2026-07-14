@@ -31,6 +31,12 @@ extension Quadrant {
         }
     }
 
+    /// Mark color for charts: the amber accent is too light against white
+    /// at bar weight, so quadrant 3 darkens; others reuse the accent.
+    var chartColor: NSColor {
+        self == .q3 ? NSColor.taskDueToday : accentColor
+    }
+
     var surfaceColor: NSColor {
         switch self {
         case .q1:

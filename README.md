@@ -18,6 +18,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
 - **Subtasks** — right-click a task → *Add Subtask…* to break it into steps; check steps off individually (the parent shows `done/total` progress), collapse/expand the list with the chevron, and rename or delete via right-click. Completing the parent completes all its subtasks
 - **Due dates** — optionally set a date-only deadline (off by default): click *Add Due Date…* in the task form or right-click a task → *Set Due Date…*; both open a styled calendar popover where one click picks the day. The task shows a due badge ("Today", "Tomorrow", or the date) that turns red when overdue and amber when due today; clear it via the ✕ in the form or right-click → *Clear Due Date*
+- **Statistics** — the *Statistics* button in the header opens a separate live-updating window: open/completed/overdue counts and on-time rate, open tasks per quadrant with a health insight, and a 14-day completion trend
 - **Auto-save** — every change is persisted immediately; no manual save
 
 ## Persistence
