@@ -20,7 +20,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     private let pickerView = QuadrantPickerView()
     private var submitButton: PillButton?
     private var dueDateCheckbox: NSButton?
-    private var dueDatePicker: NSDatePicker?
+    private var dueDateCalendar: CalendarPickerView?
 
     init(mode: Mode) {
         self.mode = mode
@@ -162,17 +162,13 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         checkbox.state = initialDueDate == nil ? .off : .on
         dueDateCheckbox = checkbox
 
-        // Graphical calendar — pick a day with one click, no digit entry.
-        let datePicker = NSDatePicker()
-        datePicker.translatesAutoresizingMaskIntoConstraints = false
-        datePicker.datePickerStyle = .clockAndCalendar
-        datePicker.datePickerElements = .yearMonthDay
-        datePicker.dateValue = initialDueDate ?? Date()
-        datePicker.isEnabled = initialDueDate != nil
-        datePicker.isHidden = initialDueDate == nil
-        dueDatePicker = datePicker
+        // Custom month calendar — pick a day with one click, no digit entry.
+        let calendarView = CalendarPickerView()
+        calendarView.selectedDate = initialDueDate
+        calendarView.isHidden = initialDueDate == nil
+        dueDateCalendar = calendarView
 
-        let dueDateRow = NSStackView(views: [checkbox, datePicker])
+        let dueDateRow = NSStackView(views: [checkbox, calendarView])
         dueDateRow.translatesAutoresizingMaskIntoConstraints = false
         dueDateRow.orientation = .vertical
         dueDateRow.alignment = .leading
@@ -313,8 +309,10 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
     @objc
     private func handleDueDateToggle(_ sender: NSButton) {
         let isOn = sender.state == .on
-        dueDatePicker?.isEnabled = isOn
-        dueDatePicker?.isHidden = !isOn
+        if isOn, dueDateCalendar?.selectedDate == nil {
+            dueDateCalendar?.selectedDate = Calendar.current.startOfDay(for: Date())
+        }
+        dueDateCalendar?.isHidden = !isOn
         // The calendar takes real vertical space; let the sheet grow and
         // shrink with it.
         preferredContentSize = view.fittingSize
@@ -333,7 +331,7 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         var dueDate: Date?
         if showsQuadrantPicker,
            dueDateCheckbox?.state == .on,
-           let picked = dueDatePicker?.dateValue {
+           let picked = dueDateCalendar?.selectedDate {
             dueDate = Calendar.current.startOfDay(for: picked)
         }
 
