@@ -23,33 +23,42 @@ private enum Quadrant: String, CaseIterable, Codable {
         }
     }
 
-    var shortLabel: String {
-        rawValue.uppercased()
-    }
-
     var strategy: String {
         switch self {
         case .q1:
-            return "DO FIRST"
+            return "Do First"
         case .q2:
-            return "SCHEDULE"
+            return "Schedule"
         case .q3:
-            return "DELEGATE"
+            return "Delegate"
         case .q4:
-            return "ELIMINATE"
+            return "Eliminate"
         }
     }
 
-    var surfaceColor: NSColor {
+    var subtitle: String {
         switch self {
         case .q1:
-            return .taskCardWarm
+            return "IMPORTANT · URGENT"
         case .q2:
-            return .taskCardFresh
+            return "IMPORTANT · NOT URGENT"
         case .q3:
-            return .taskCardMist
+            return "NOT IMPORTANT · URGENT"
         case .q4:
-            return .taskCardLight
+            return "NOT IMPORTANT · NOT URGENT"
+        }
+    }
+
+    var accentColor: NSColor {
+        switch self {
+        case .q1:
+            return NSColor(red: 0.898, green: 0.283, blue: 0.302, alpha: 1)   // red — act now
+        case .q2:
+            return NSColor(red: 0.455, green: 0.753, blue: 0.263, alpha: 1)   // green — plan
+        case .q3:
+            return NSColor(red: 0.961, green: 0.702, blue: 0.004, alpha: 1)   // amber — hand off
+        case .q4:
+            return NSColor(red: 0.608, green: 0.627, blue: 0.588, alpha: 1)   // gray — drop
         }
     }
 }
@@ -178,17 +187,41 @@ private final class TaskStore {
     }
 }
 
-private final class HoverScaleButton: NSButton {
+/// Lime pill CTA in the Wise style: dark-green label, grows on hover, compresses on click.
+private final class PillButton: NSButton {
     private var trackingAreaRef: NSTrackingArea?
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        commonInit()
+    init(title: String, target: AnyObject?, action: Selector?) {
+        super.init(frame: .zero)
+        self.target = target
+        self.action = action
+
+        translatesAutoresizingMaskIntoConstraints = false
+        isBordered = false
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.taskAccent.cgColor
+        layer?.cornerRadius = 18
+
+        attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 14, weight: .bold),
+                .foregroundColor: NSColor.taskAccentText
+            ]
+        )
+
+        heightAnchor.constraint(equalToConstant: 36).isActive = true
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        commonInit()
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        var size = super.intrinsicContentSize
+        size.width += 36
+        return size
     }
 
     override func updateTrackingAreas() {
@@ -226,13 +259,11 @@ private final class HoverScaleButton: NSButton {
         animateScale(to: bounds.contains(location) ? 1.05 : 1)
     }
 
-    private func commonInit() {
-        wantsLayer = true
-        isBordered = false
-    }
-
     private func animateScale(to scale: CGFloat) {
         guard let layer else { return }
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        layer.position = center
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         layer.transform = CATransform3DMakeScale(scale, scale, 1)
     }
 }
@@ -327,7 +358,11 @@ private final class TaskRowView: NSView {
         let moveMenu = NSMenu(title: "Move to")
 
         for quadrant in Quadrant.allCases where quadrant != task.quadrant {
-            let item = NSMenuItem(title: quadrant.title, action: #selector(handleMoveToQuadrant(_:)), keyEquivalent: "")
+            let item = NSMenuItem(
+                title: "\(quadrant.strategy) — \(quadrant.title)",
+                action: #selector(handleMoveToQuadrant(_:)),
+                keyEquivalent: ""
+            )
             item.representedObject = quadrant.rawValue
             item.target = self
             moveMenu.addItem(item)
@@ -346,7 +381,7 @@ private final class TaskRowView: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.cornerRadius = 16
+        layer?.cornerRadius = 10
         layer?.borderWidth = 1
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -357,19 +392,19 @@ private final class TaskRowView: NSView {
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         rowStack.orientation = .horizontal
         rowStack.alignment = .centerY
-        rowStack.spacing = 10
+        rowStack.spacing = 9
 
         addSubview(rowStack)
 
         NSLayoutConstraint.activate([
-            completeCheckbox.widthAnchor.constraint(equalToConstant: 18),
-            completeCheckbox.heightAnchor.constraint(equalToConstant: 18),
+            completeCheckbox.widthAnchor.constraint(equalToConstant: 16),
+            completeCheckbox.heightAnchor.constraint(equalToConstant: 16),
 
-            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            rowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
+            rowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -11),
+            rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 9),
+            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 38)
         ])
 
         let doubleClickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleDoubleClick(_:)))
@@ -379,15 +414,27 @@ private final class TaskRowView: NSView {
 
     private func updateAppearance() {
         completeCheckbox.state = task.isCompleted ? .on : .off
-        titleLabel.stringValue = task.title
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
 
         if task.isCompleted {
-            alphaValue = 0.55
-            titleLabel.textColor = NSColor.taskMuted
+            titleLabel.attributedStringValue = NSAttributedString(
+                string: task.title,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+                    .foregroundColor: NSColor.taskMuted,
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    .strikethroughColor: NSColor.taskMuted
+                ]
+            )
+            alphaValue = 0.6
         } else {
+            titleLabel.attributedStringValue = NSAttributedString(
+                string: task.title,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                    .foregroundColor: NSColor.taskInk
+                ]
+            )
             alphaValue = 1
-            titleLabel.textColor = NSColor.taskInk
         }
 
         refreshContainerStyle()
@@ -404,7 +451,7 @@ private final class TaskRowView: NSView {
         }
 
         layer.backgroundColor = backgroundColor.cgColor
-        layer.borderColor = (isHovering ? NSColor.taskAccent.withAlphaComponent(0.45) : NSColor.taskRing).cgColor
+        layer.borderColor = (isHovering ? NSColor.taskAccent.withAlphaComponent(0.55) : NSColor.taskRing).cgColor
     }
 
     @objc
@@ -444,8 +491,8 @@ private final class QuadrantCardView: NSView {
     var onTaskDropped: ((String) -> Void)?
 
     private let listStack = NSStackView()
-    private let emptyStateLabel = NSTextField(labelWithString: "No tasks yet")
-    private let taskCountLabel = NSTextField(labelWithString: "0 Tasks")
+    private let emptyStateLabel = NSTextField(labelWithString: "No tasks — drag one here")
+    private let countLabel = NSTextField(labelWithString: "0")
 
     private let quadrant: Quadrant
 
@@ -455,6 +502,11 @@ private final class QuadrantCardView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         setupUI()
         registerForDraggedTypes([.taskID])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -478,16 +530,6 @@ private final class QuadrantCardView: NSView {
         return true
     }
 
-    private func setDropHighlight(_ isActive: Bool) {
-        layer?.borderWidth = isActive ? 2 : 1
-        layer?.borderColor = (isActive ? NSColor.taskAccent : NSColor.taskRing).cgColor
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
     func render(
         tasks: [TaskItem],
         onToggleCompleted: @escaping (String, Bool) -> Void,
@@ -500,8 +542,9 @@ private final class QuadrantCardView: NSView {
             subview.removeFromSuperview()
         }
 
+        let openCount = tasks.filter { !$0.isCompleted }.count
         emptyStateLabel.isHidden = !tasks.isEmpty
-        taskCountLabel.stringValue = "\(tasks.count) \(tasks.count == 1 ? "Task" : "Tasks")"
+        countLabel.stringValue = "\(openCount)"
 
         let sortedTasks = tasks.sorted { lhs, rhs in
             if lhs.isCompleted != rhs.isCompleted {
@@ -531,63 +574,74 @@ private final class QuadrantCardView: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.cornerRadius = 34
-        layer?.backgroundColor = quadrant.surfaceColor.cgColor
+        layer?.cornerRadius = 16
+        layer?.backgroundColor = NSColor.taskCard.cgColor
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.taskRing.cgColor
 
-        let accentLine = NSView()
-        accentLine.translatesAutoresizingMaskIntoConstraints = false
-        accentLine.wantsLayer = true
-        accentLine.layer?.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.85).cgColor
-        accentLine.layer?.cornerRadius = 2
-
-        let badgeText = NSTextField(labelWithString: quadrant.shortLabel)
-        badgeText.translatesAutoresizingMaskIntoConstraints = false
-        badgeText.font = .systemFont(ofSize: 11, weight: .bold)
-        badgeText.textColor = NSColor.taskAccentText
-
-        let badgeView = NSView()
-        badgeView.translatesAutoresizingMaskIntoConstraints = false
-        badgeView.wantsLayer = true
-        badgeView.layer?.cornerRadius = 999
-        badgeView.layer?.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.34).cgColor
-        badgeView.addSubview(badgeText)
-
-        let titleLabel = NSTextField(labelWithString: quadrant.title)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 19, weight: .black)
-        titleLabel.textColor = NSColor.taskInk
+        let dot = NSView()
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = quadrant.accentColor.cgColor
+        dot.layer?.cornerRadius = 5
 
         let strategyLabel = NSTextField(labelWithString: quadrant.strategy)
         strategyLabel.translatesAutoresizingMaskIntoConstraints = false
-        strategyLabel.font = .systemFont(ofSize: 11, weight: .bold)
-        strategyLabel.textColor = NSColor.taskMuted
+        strategyLabel.font = .systemFont(ofSize: 17, weight: .bold)
+        strategyLabel.textColor = NSColor.taskInk
 
-        taskCountLabel.translatesAutoresizingMaskIntoConstraints = false
-        taskCountLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        taskCountLabel.textColor = NSColor.taskMuted
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
+        countLabel.textColor = NSColor.taskMuted
+        countLabel.alignment = .center
+
+        let countBadge = NSView()
+        countBadge.translatesAutoresizingMaskIntoConstraints = false
+        countBadge.wantsLayer = true
+        countBadge.layer?.cornerRadius = 10
+        countBadge.layer?.backgroundColor = NSColor.taskInk.withAlphaComponent(0.06).cgColor
+        countBadge.addSubview(countLabel)
 
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
-
-        let titleRow = NSStackView(views: [badgeView, titleLabel, headerSpacer, taskCountLabel])
-        titleRow.translatesAutoresizingMaskIntoConstraints = false
-        titleRow.orientation = .horizontal
-        titleRow.alignment = .centerY
-        titleRow.spacing = 10
-
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let headerRow = NSStackView(views: [dot, strategyLabel, headerSpacer, countBadge])
+        headerRow.translatesAutoresizingMaskIntoConstraints = false
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .centerY
+        headerRow.spacing = 8
+
+        let subtitleLabel = NSTextField(labelWithString: quadrant.subtitle)
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        subtitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        subtitleLabel.textColor = NSColor.taskMuted
+
+        let subtitleText = NSMutableAttributedString(string: quadrant.subtitle)
+        subtitleText.addAttributes(
+            [
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                .foregroundColor: NSColor.taskMuted,
+                .kern: 0.7
+            ],
+            range: NSRange(location: 0, length: subtitleText.length)
+        )
+        subtitleLabel.attributedStringValue = subtitleText
+
+        let separator = NSView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.taskRing.cgColor
 
         listStack.translatesAutoresizingMaskIntoConstraints = false
         listStack.orientation = .vertical
         listStack.alignment = .leading
-        listStack.spacing = 8
+        listStack.spacing = 6
 
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        emptyStateLabel.textColor = NSColor.taskMuted
+        emptyStateLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        emptyStateLabel.textColor = NSColor.taskMuted.withAlphaComponent(0.75)
 
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -602,32 +656,36 @@ private final class QuadrantCardView: NSView {
         scrollView.autohidesScrollers = true
         scrollView.documentView = contentView
 
-        addSubview(accentLine)
-        addSubview(titleRow)
-        addSubview(strategyLabel)
+        addSubview(headerRow)
+        addSubview(subtitleLabel)
+        addSubview(separator)
         addSubview(scrollView)
 
         NSLayoutConstraint.activate([
-            accentLine.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            accentLine.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            accentLine.topAnchor.constraint(equalTo: topAnchor, constant: 14),
-            accentLine.heightAnchor.constraint(equalToConstant: 4),
+            dot.widthAnchor.constraint(equalToConstant: 10),
+            dot.heightAnchor.constraint(equalToConstant: 10),
 
-            badgeText.leadingAnchor.constraint(equalTo: badgeView.leadingAnchor, constant: 10),
-            badgeText.trailingAnchor.constraint(equalTo: badgeView.trailingAnchor, constant: -10),
-            badgeText.topAnchor.constraint(equalTo: badgeView.topAnchor, constant: 5),
-            badgeText.bottomAnchor.constraint(equalTo: badgeView.bottomAnchor, constant: -5),
+            countLabel.leadingAnchor.constraint(equalTo: countBadge.leadingAnchor, constant: 9),
+            countLabel.trailingAnchor.constraint(equalTo: countBadge.trailingAnchor, constant: -9),
+            countLabel.topAnchor.constraint(equalTo: countBadge.topAnchor, constant: 3),
+            countLabel.bottomAnchor.constraint(equalTo: countBadge.bottomAnchor, constant: -3),
+            countLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 12),
 
-            titleRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            titleRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            titleRow.topAnchor.constraint(equalTo: accentLine.bottomAnchor, constant: 14),
+            headerRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            headerRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            headerRow.topAnchor.constraint(equalTo: topAnchor, constant: 14),
 
-            strategyLabel.leadingAnchor.constraint(equalTo: titleRow.leadingAnchor),
-            strategyLabel.topAnchor.constraint(equalTo: titleRow.bottomAnchor, constant: 4),
+            subtitleLabel.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor),
+            subtitleLabel.topAnchor.constraint(equalTo: headerRow.bottomAnchor, constant: 2),
+
+            separator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            separator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            separator.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 10),
+            separator.heightAnchor.constraint(equalToConstant: 1),
 
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            scrollView.topAnchor.constraint(equalTo: strategyLabel.bottomAnchor, constant: 12),
+            scrollView.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
 
             contentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
@@ -636,14 +694,22 @@ private final class QuadrantCardView: NSView {
             contentView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
             contentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
 
-            listStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
-            listStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -6),
-            listStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
-            listStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -6),
+            listStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 4),
+            listStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            listStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
+            listStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -4),
 
-            emptyStateLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
-            emptyStateLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8)
+            emptyStateLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
+            emptyStateLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4)
         ])
+    }
+
+    private func setDropHighlight(_ isActive: Bool) {
+        layer?.borderWidth = isActive ? 2 : 1
+        layer?.borderColor = (isActive ? quadrant.accentColor : NSColor.taskRing).cgColor
+        layer?.backgroundColor = (isActive
+            ? quadrant.accentColor.withAlphaComponent(0.06)
+            : NSColor.taskCard).cgColor
     }
 }
 
@@ -653,7 +719,7 @@ final class ViewController: NSViewController {
     private var didInstallCommandN = false
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 1180, height: 820))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
     }
 
     override func viewDidLoad() {
@@ -666,160 +732,99 @@ final class ViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         installCommandNShortcutIfNeeded()
+
+        view.window?.title = "Task Matrix"
+        view.window?.minSize = NSSize(width: 760, height: 560)
     }
 
     private func setupRootUI() {
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.taskCanvas.cgColor
 
-        installDecorativeBackground()
-
-        let eyebrowLabel = NSTextField(labelWithString: "EISENHOWER METHOD")
-        eyebrowLabel.translatesAutoresizingMaskIntoConstraints = false
-        eyebrowLabel.font = .systemFont(ofSize: 12, weight: .bold)
-        eyebrowLabel.textColor = NSColor.taskAccentText
-
-        let eyebrowCapsule = NSView()
-        eyebrowCapsule.translatesAutoresizingMaskIntoConstraints = false
-        eyebrowCapsule.wantsLayer = true
-        eyebrowCapsule.layer?.cornerRadius = 999
-        eyebrowCapsule.layer?.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.34).cgColor
-        eyebrowCapsule.addSubview(eyebrowLabel)
-
+        // Header — one compact line: title on the left, actions on the right.
         let titleLabel = NSTextField(labelWithString: "")
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.maximumNumberOfLines = 2
-        titleLabel.lineBreakMode = .byWordWrapping
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineHeightMultiple = 0.86
-
         titleLabel.attributedStringValue = NSAttributedString(
-            string: "TASK\nMATRIX",
+            string: "Task Matrix",
             attributes: [
-                .font: NSFont.systemFont(ofSize: 74, weight: .black),
+                .font: NSFont.systemFont(ofSize: 22, weight: .black),
                 .foregroundColor: NSColor.taskInk,
-                .paragraphStyle: paragraph,
-                .kern: -1.2
+                .kern: -0.4
             ]
         )
 
-        let subtitleLabel = NSTextField(labelWithString: "Prioritize what matters. Move fast with zero clutter.")
+        let subtitleLabel = NSTextField(labelWithString: "Decide what to do next — not just list tasks.")
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        subtitleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         subtitleLabel.textColor = NSColor.taskMuted
 
-        let titleStack = NSStackView(views: [eyebrowCapsule, titleLabel, subtitleLabel])
+        let titleStack = NSStackView(views: [titleLabel, subtitleLabel])
         titleStack.translatesAutoresizingMaskIntoConstraints = false
         titleStack.orientation = .vertical
         titleStack.alignment = .leading
-        titleStack.spacing = 8
+        titleStack.spacing = 1
 
-        let addTaskButton = HoverScaleButton(title: "+ New Task", target: self, action: #selector(handleAddTaskAction(_:)))
-        addTaskButton.translatesAutoresizingMaskIntoConstraints = false
-        addTaskButton.bezelStyle = .regularSquare
-        addTaskButton.layer?.cornerRadius = 999
-        addTaskButton.layer?.backgroundColor = NSColor.taskAccent.cgColor
-        addTaskButton.contentTintColor = NSColor.taskAccentText
-        addTaskButton.font = .systemFont(ofSize: 15, weight: .bold)
-
-        let shortcutHint = NSTextField(labelWithString: "⌘N Quick Create")
+        let shortcutHint = NSTextField(labelWithString: "⌘N")
         shortcutHint.translatesAutoresizingMaskIntoConstraints = false
         shortcutHint.font = .systemFont(ofSize: 12, weight: .semibold)
         shortcutHint.textColor = NSColor.taskMuted
 
-        let actionStack = NSStackView(views: [addTaskButton, shortcutHint])
-        actionStack.translatesAutoresizingMaskIntoConstraints = false
-        actionStack.orientation = .vertical
-        actionStack.alignment = .trailing
-        actionStack.spacing = 8
+        let addTaskButton = PillButton(title: "+ New Task", target: self, action: #selector(handleAddTaskAction(_:)))
 
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
-
-        let headerStack = NSStackView(views: [titleStack, headerSpacer, actionStack])
-        headerStack.translatesAutoresizingMaskIntoConstraints = false
-        headerStack.orientation = .horizontal
-        headerStack.alignment = .top
-        headerStack.spacing = 16
-
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let matrixStack = NSStackView()
-        matrixStack.translatesAutoresizingMaskIntoConstraints = false
-        matrixStack.orientation = .vertical
-        matrixStack.distribution = .fillEqually
-        matrixStack.spacing = 18
+        let headerRow = NSStackView(views: [titleStack, headerSpacer, shortcutHint, addTaskButton])
+        headerRow.translatesAutoresizingMaskIntoConstraints = false
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .centerY
+        headerRow.spacing = 12
 
+        // Matrix — a true 2x2 grid; rows pinned to full width so columns align.
         let topRow = NSStackView()
+        topRow.translatesAutoresizingMaskIntoConstraints = false
         topRow.orientation = .horizontal
         topRow.distribution = .fillEqually
-        topRow.spacing = 18
+        topRow.spacing = 14
 
         let bottomRow = NSStackView()
+        bottomRow.translatesAutoresizingMaskIntoConstraints = false
         bottomRow.orientation = .horizontal
         bottomRow.distribution = .fillEqually
-        bottomRow.spacing = 18
+        bottomRow.spacing = 14
 
         for quadrant in [Quadrant.q1, .q2] {
-            let card = makeQuadrantCard(for: quadrant)
-            topRow.addArrangedSubview(card)
+            topRow.addArrangedSubview(makeQuadrantCard(for: quadrant))
         }
 
         for quadrant in [Quadrant.q3, .q4] {
-            let card = makeQuadrantCard(for: quadrant)
-            bottomRow.addArrangedSubview(card)
+            bottomRow.addArrangedSubview(makeQuadrantCard(for: quadrant))
         }
 
-        matrixStack.addArrangedSubview(topRow)
-        matrixStack.addArrangedSubview(bottomRow)
+        let matrixStack = NSStackView(views: [topRow, bottomRow])
+        matrixStack.translatesAutoresizingMaskIntoConstraints = false
+        matrixStack.orientation = .vertical
+        matrixStack.distribution = .fillEqually
+        matrixStack.alignment = .leading
+        matrixStack.spacing = 14
 
-        let matrixContainer = NSView()
-        matrixContainer.translatesAutoresizingMaskIntoConstraints = false
-        matrixContainer.wantsLayer = true
-        matrixContainer.layer?.cornerRadius = 40
-        matrixContainer.layer?.backgroundColor = NSColor.taskFrost.cgColor
-        matrixContainer.layer?.borderWidth = 1
-        matrixContainer.layer?.borderColor = NSColor.taskRing.cgColor
-
-        matrixContainer.addSubview(matrixStack)
+        view.addSubview(headerRow)
+        view.addSubview(matrixStack)
 
         NSLayoutConstraint.activate([
-            matrixStack.leadingAnchor.constraint(equalTo: matrixContainer.leadingAnchor, constant: 18),
-            matrixStack.trailingAnchor.constraint(equalTo: matrixContainer.trailingAnchor, constant: -18),
-            matrixStack.topAnchor.constraint(equalTo: matrixContainer.topAnchor, constant: 18),
-            matrixStack.bottomAnchor.constraint(equalTo: matrixContainer.bottomAnchor, constant: -18),
-            matrixStack.heightAnchor.constraint(greaterThanOrEqualToConstant: 560)
-        ])
+            headerRow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            headerRow.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            headerRow.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
 
-        let rootStack = NSStackView(views: [headerStack, matrixContainer])
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
-        rootStack.orientation = .vertical
-        rootStack.spacing = 18
-        rootStack.alignment = .leading
+            matrixStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            matrixStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            matrixStack.topAnchor.constraint(equalTo: headerRow.bottomAnchor, constant: 16),
+            matrixStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
 
-        view.addSubview(rootStack)
-
-        NSLayoutConstraint.activate([
-            eyebrowLabel.leadingAnchor.constraint(equalTo: eyebrowCapsule.leadingAnchor, constant: 10),
-            eyebrowLabel.trailingAnchor.constraint(equalTo: eyebrowCapsule.trailingAnchor, constant: -10),
-            eyebrowLabel.topAnchor.constraint(equalTo: eyebrowCapsule.topAnchor, constant: 6),
-            eyebrowLabel.bottomAnchor.constraint(equalTo: eyebrowCapsule.bottomAnchor, constant: -6),
-
-            addTaskButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 138),
-            addTaskButton.heightAnchor.constraint(equalToConstant: 40),
-
-            rootStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 28),
-            rootStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -28),
-            rootStack.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
-            rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -24),
-
-            headerStack.leadingAnchor.constraint(equalTo: rootStack.leadingAnchor),
-            headerStack.trailingAnchor.constraint(equalTo: rootStack.trailingAnchor),
-
-            matrixContainer.leadingAnchor.constraint(equalTo: rootStack.leadingAnchor),
-            matrixContainer.trailingAnchor.constraint(equalTo: rootStack.trailingAnchor)
+            topRow.widthAnchor.constraint(equalTo: matrixStack.widthAnchor),
+            bottomRow.widthAnchor.constraint(equalTo: matrixStack.widthAnchor)
         ])
     }
 
@@ -830,35 +835,6 @@ final class ViewController: NSViewController {
         }
         quadrantViews[quadrant] = card
         return card
-    }
-
-    private func installDecorativeBackground() {
-        let blobA = NSView()
-        blobA.translatesAutoresizingMaskIntoConstraints = false
-        blobA.wantsLayer = true
-        blobA.layer?.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.20).cgColor
-        blobA.layer?.cornerRadius = 170
-
-        let blobB = NSView()
-        blobB.translatesAutoresizingMaskIntoConstraints = false
-        blobB.wantsLayer = true
-        blobB.layer?.backgroundColor = NSColor.taskMint.withAlphaComponent(0.55).cgColor
-        blobB.layer?.cornerRadius = 140
-
-        view.addSubview(blobA)
-        view.addSubview(blobB)
-
-        NSLayoutConstraint.activate([
-            blobA.widthAnchor.constraint(equalToConstant: 340),
-            blobA.heightAnchor.constraint(equalToConstant: 340),
-            blobA.topAnchor.constraint(equalTo: view.topAnchor, constant: -150),
-            blobA.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 90),
-
-            blobB.widthAnchor.constraint(equalToConstant: 280),
-            blobB.heightAnchor.constraint(equalToConstant: 280),
-            blobB.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 120),
-            blobB.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: -90)
-        ])
     }
 
     private func bindStore() {
@@ -914,7 +890,7 @@ final class ViewController: NSViewController {
 
     private func presentAddTaskDialog() {
         let alert = NSAlert()
-        alert.messageText = "Create Task"
+        alert.messageText = "New Task"
         alert.informativeText = "Add a title and choose a quadrant."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Create")
@@ -931,7 +907,7 @@ final class ViewController: NSViewController {
 
         let quadrantPicker = NSPopUpButton()
         Quadrant.allCases.forEach { quadrant in
-            quadrantPicker.addItem(withTitle: quadrant.title)
+            quadrantPicker.addItem(withTitle: "\(quadrant.strategy) — \(quadrant.title)")
             quadrantPicker.lastItem?.representedObject = quadrant.rawValue
         }
 
@@ -950,6 +926,7 @@ final class ViewController: NSViewController {
         ])
 
         alert.accessoryView = accessory
+        alert.window.initialFirstResponder = titleField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
@@ -983,6 +960,7 @@ final class ViewController: NSViewController {
         titleField.translatesAutoresizingMaskIntoConstraints = false
         titleField.widthAnchor.constraint(equalToConstant: 320).isActive = true
         alert.accessoryView = titleField
+        alert.window.initialFirstResponder = titleField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
@@ -1007,22 +985,16 @@ final class ViewController: NSViewController {
 }
 
 private extension NSColor {
-    static let taskCanvas = NSColor(red: 0.963, green: 0.969, blue: 0.949, alpha: 1)
-    static let taskMint = NSColor(red: 0.886, green: 0.965, blue: 0.835, alpha: 1)
-    static let taskFrost = NSColor.white.withAlphaComponent(0.62)
+    static let taskCanvas = NSColor(red: 0.957, green: 0.961, blue: 0.945, alpha: 1)
+    static let taskCard = NSColor.white
 
     static let taskInk = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 1)
-    static let taskMuted = NSColor(red: 0.40, green: 0.43, blue: 0.39, alpha: 1)
+    static let taskMuted = NSColor(red: 0.42, green: 0.45, blue: 0.41, alpha: 1)
 
     static let taskAccent = NSColor(red: 0.624, green: 0.909, blue: 0.439, alpha: 1)
     static let taskAccentText = NSColor(red: 0.086, green: 0.200, blue: 0.0, alpha: 1)
 
-    static let taskRing = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 0.12)
-    static let taskSurface = NSColor(red: 0.993, green: 0.996, blue: 0.987, alpha: 1)
-    static let taskSurfaceHover = NSColor(red: 0.973, green: 0.991, blue: 0.940, alpha: 1)
-
-    static let taskCardWarm = NSColor(red: 0.985, green: 0.986, blue: 0.979, alpha: 1)
-    static let taskCardFresh = NSColor(red: 0.970, green: 0.986, blue: 0.963, alpha: 1)
-    static let taskCardMist = NSColor(red: 0.978, green: 0.985, blue: 0.986, alpha: 1)
-    static let taskCardLight = NSColor(red: 0.989, green: 0.990, blue: 0.985, alpha: 1)
+    static let taskRing = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 0.10)
+    static let taskSurface = NSColor(red: 0.975, green: 0.978, blue: 0.968, alpha: 1)
+    static let taskSurfaceHover = NSColor(red: 0.960, green: 0.982, blue: 0.930, alpha: 1)
 }
