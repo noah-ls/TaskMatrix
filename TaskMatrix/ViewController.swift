@@ -187,11 +187,22 @@ private final class TaskStore {
     }
 }
 
-/// Lime pill CTA in the Wise style: dark-green label, grows on hover, compresses on click.
+/// Pill CTA in the Wise style: grows on hover, compresses on click.
 private final class PillButton: NSButton {
+    enum Style {
+        case primary
+        case subtle
+    }
+
     private var trackingAreaRef: NSTrackingArea?
 
-    init(title: String, target: AnyObject?, action: Selector?) {
+    override var isEnabled: Bool {
+        didSet {
+            alphaValue = isEnabled ? 1 : 0.4
+        }
+    }
+
+    init(title: String, style: Style = .primary, target: AnyObject?, action: Selector?) {
         super.init(frame: .zero)
         self.target = target
         self.action = action
@@ -199,14 +210,25 @@ private final class PillButton: NSButton {
         translatesAutoresizingMaskIntoConstraints = false
         isBordered = false
         wantsLayer = true
-        layer?.backgroundColor = NSColor.taskAccent.cgColor
         layer?.cornerRadius = 18
 
+        let backgroundColor: NSColor
+        let textColor: NSColor
+        switch style {
+        case .primary:
+            backgroundColor = .taskAccent
+            textColor = .taskAccentText
+        case .subtle:
+            backgroundColor = NSColor.taskInk.withAlphaComponent(0.06)
+            textColor = .taskInk
+        }
+
+        layer?.backgroundColor = backgroundColor.cgColor
         attributedTitle = NSAttributedString(
             string: title,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 14, weight: .bold),
-                .foregroundColor: NSColor.taskAccentText
+                .foregroundColor: textColor
             ]
         )
 
@@ -713,6 +735,307 @@ private final class QuadrantCardView: NSView {
     }
 }
 
+/// One selectable quadrant tile inside the task form's 2x2 picker.
+private final class QuadrantOptionView: NSView {
+    let quadrant: Quadrant
+    var onSelect: ((Quadrant) -> Void)?
+
+    var isChosen = false {
+        didSet { refreshStyle() }
+    }
+
+    init(quadrant: Quadrant) {
+        self.quadrant = quadrant
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setupUI()
+        refreshStyle()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupUI() {
+        wantsLayer = true
+        layer?.cornerRadius = 10
+
+        let dot = NSView()
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = quadrant.accentColor.cgColor
+        dot.layer?.cornerRadius = 4
+
+        let strategyLabel = NSTextField(labelWithString: quadrant.strategy)
+        strategyLabel.translatesAutoresizingMaskIntoConstraints = false
+        strategyLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        strategyLabel.textColor = NSColor.taskInk
+
+        let titleRow = NSStackView(views: [dot, strategyLabel])
+        titleRow.translatesAutoresizingMaskIntoConstraints = false
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .centerY
+        titleRow.spacing = 6
+
+        let captionLabel = NSTextField(labelWithString: "")
+        captionLabel.translatesAutoresizingMaskIntoConstraints = false
+        let captionText = NSMutableAttributedString(string: quadrant.subtitle)
+        captionText.addAttributes(
+            [
+                .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+                .foregroundColor: NSColor.taskMuted,
+                .kern: 0.5
+            ],
+            range: NSRange(location: 0, length: captionText.length)
+        )
+        captionLabel.attributedStringValue = captionText
+
+        let contentStack = NSStackView(views: [titleRow, captionLabel])
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 3
+
+        addSubview(contentStack)
+
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 8),
+            dot.heightAnchor.constraint(equalToConstant: 8),
+
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            contentStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 54)
+        ])
+
+        let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
+        addGestureRecognizer(clickRecognizer)
+    }
+
+    private func refreshStyle() {
+        guard let layer else { return }
+
+        if isChosen {
+            layer.borderWidth = 2
+            layer.borderColor = quadrant.accentColor.cgColor
+            layer.backgroundColor = quadrant.accentColor.withAlphaComponent(0.08).cgColor
+        } else {
+            layer.borderWidth = 1
+            layer.borderColor = NSColor.taskRing.cgColor
+            layer.backgroundColor = NSColor.taskSurface.cgColor
+        }
+    }
+
+    @objc
+    private func handleClick(_ recognizer: NSClickGestureRecognizer) {
+        onSelect?(quadrant)
+    }
+}
+
+/// Sheet used for both creating and editing a task, styled to match the matrix.
+private final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
+    enum Mode {
+        case create
+        case edit(TaskItem)
+    }
+
+    var onSubmit: ((String, Quadrant) -> Void)?
+
+    private let mode: Mode
+    private var selectedQuadrant: Quadrant
+    private var optionViews: [QuadrantOptionView] = []
+
+    private let titleField = NSTextField()
+    private var submitButton: PillButton?
+
+    init(mode: Mode) {
+        self.mode = mode
+        switch mode {
+        case .create:
+            selectedQuadrant = .q1
+        case .edit(let task):
+            selectedQuadrant = task.quadrant
+        }
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 320))
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.taskCanvas.cgColor
+
+        let isCreate: Bool
+        if case .create = mode { isCreate = true } else { isCreate = false }
+
+        let headingLabel = NSTextField(labelWithString: isCreate ? "New Task" : "Edit Task")
+        headingLabel.translatesAutoresizingMaskIntoConstraints = false
+        headingLabel.font = .systemFont(ofSize: 17, weight: .black)
+        headingLabel.textColor = NSColor.taskInk
+
+        let subheadingLabel = NSTextField(labelWithString: "Give it a clear title and pick where it belongs.")
+        subheadingLabel.translatesAutoresizingMaskIntoConstraints = false
+        subheadingLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        subheadingLabel.textColor = NSColor.taskMuted
+
+        titleField.translatesAutoresizingMaskIntoConstraints = false
+        titleField.placeholderString = "Task title"
+        titleField.font = .systemFont(ofSize: 14, weight: .medium)
+        titleField.bezelStyle = .roundedBezel
+        titleField.controlSize = .large
+        titleField.delegate = self
+        if case .edit(let task) = mode {
+            titleField.stringValue = task.title
+        }
+
+        let quadrantLabel = NSTextField(labelWithString: "QUADRANT")
+        quadrantLabel.translatesAutoresizingMaskIntoConstraints = false
+        let quadrantText = NSMutableAttributedString(string: "QUADRANT")
+        quadrantText.addAttributes(
+            [
+                .font: NSFont.systemFont(ofSize: 10, weight: .bold),
+                .foregroundColor: NSColor.taskMuted,
+                .kern: 0.8
+            ],
+            range: NSRange(location: 0, length: quadrantText.length)
+        )
+        quadrantLabel.attributedStringValue = quadrantText
+
+        let optionTopRow = NSStackView()
+        optionTopRow.translatesAutoresizingMaskIntoConstraints = false
+        optionTopRow.orientation = .horizontal
+        optionTopRow.distribution = .fillEqually
+        optionTopRow.spacing = 8
+
+        let optionBottomRow = NSStackView()
+        optionBottomRow.translatesAutoresizingMaskIntoConstraints = false
+        optionBottomRow.orientation = .horizontal
+        optionBottomRow.distribution = .fillEqually
+        optionBottomRow.spacing = 8
+
+        for quadrant in Quadrant.allCases {
+            let option = QuadrantOptionView(quadrant: quadrant)
+            option.onSelect = { [weak self] chosen in
+                self?.selectQuadrant(chosen)
+            }
+            optionViews.append(option)
+            (quadrant == .q1 || quadrant == .q2 ? optionTopRow : optionBottomRow).addArrangedSubview(option)
+        }
+
+        let optionsStack = NSStackView(views: [optionTopRow, optionBottomRow])
+        optionsStack.translatesAutoresizingMaskIntoConstraints = false
+        optionsStack.orientation = .vertical
+        optionsStack.alignment = .leading
+        optionsStack.spacing = 8
+
+        let cancelButton = PillButton(
+            title: "Cancel",
+            style: .subtle,
+            target: self,
+            action: #selector(handleCancel(_:))
+        )
+        cancelButton.keyEquivalent = "\u{1b}"
+
+        let submit = PillButton(
+            title: isCreate ? "Create Task" : "Save Changes",
+            target: self,
+            action: #selector(handleSubmit(_:))
+        )
+        submit.keyEquivalent = "\r"
+        submitButton = submit
+
+        let buttonSpacer = NSView()
+        buttonSpacer.translatesAutoresizingMaskIntoConstraints = false
+        buttonSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        buttonSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let buttonRow = NSStackView(views: [buttonSpacer, cancelButton, submit])
+        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.spacing = 8
+
+        view.addSubview(headingLabel)
+        view.addSubview(subheadingLabel)
+        view.addSubview(titleField)
+        view.addSubview(quadrantLabel)
+        view.addSubview(optionsStack)
+        view.addSubview(buttonRow)
+
+        NSLayoutConstraint.activate([
+            view.widthAnchor.constraint(equalToConstant: 440),
+
+            headingLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            headingLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
+
+            subheadingLabel.leadingAnchor.constraint(equalTo: headingLabel.leadingAnchor),
+            subheadingLabel.topAnchor.constraint(equalTo: headingLabel.bottomAnchor, constant: 2),
+
+            titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            titleField.topAnchor.constraint(equalTo: subheadingLabel.bottomAnchor, constant: 14),
+
+            quadrantLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            quadrantLabel.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 16),
+
+            optionsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            optionsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            optionsStack.topAnchor.constraint(equalTo: quadrantLabel.bottomAnchor, constant: 8),
+
+            optionTopRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
+            optionBottomRow.widthAnchor.constraint(equalTo: optionsStack.widthAnchor),
+
+            buttonRow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            buttonRow.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            buttonRow.topAnchor.constraint(equalTo: optionsStack.bottomAnchor, constant: 18),
+            buttonRow.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -18)
+        ])
+
+        selectQuadrant(selectedQuadrant)
+        refreshSubmitEnabled()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.makeFirstResponder(titleField)
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        refreshSubmitEnabled()
+    }
+
+    private func selectQuadrant(_ quadrant: Quadrant) {
+        selectedQuadrant = quadrant
+        for option in optionViews {
+            option.isChosen = option.quadrant == quadrant
+        }
+    }
+
+    private func refreshSubmitEnabled() {
+        let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        submitButton?.isEnabled = !trimmed.isEmpty
+    }
+
+    @objc
+    private func handleCancel(_ sender: Any?) {
+        dismiss(self)
+    }
+
+    @objc
+    private func handleSubmit(_ sender: Any?) {
+        let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        onSubmit?(trimmed, selectedQuadrant)
+        dismiss(self)
+    }
+}
+
 final class ViewController: NSViewController {
     private let store = TaskStore()
     private var quadrantViews: [Quadrant: QuadrantCardView] = [:]
@@ -889,98 +1212,24 @@ final class ViewController: NSViewController {
     }
 
     private func presentAddTaskDialog() {
-        let alert = NSAlert()
-        alert.messageText = "New Task"
-        alert.informativeText = "Add a title and choose a quadrant."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-
-        let titleLabel = NSTextField(labelWithString: "Title")
-        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-
-        let titleField = NSTextField(string: "")
-        titleField.placeholderString = "Enter task title"
-
-        let quadrantLabel = NSTextField(labelWithString: "Quadrant")
-        quadrantLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-
-        let quadrantPicker = NSPopUpButton()
-        Quadrant.allCases.forEach { quadrant in
-            quadrantPicker.addItem(withTitle: "\(quadrant.strategy) — \(quadrant.title)")
-            quadrantPicker.lastItem?.representedObject = quadrant.rawValue
+        let form = TaskFormViewController(mode: .create)
+        form.onSubmit = { [weak self] title, quadrant in
+            self?.store.addTask(title: title, quadrant: quadrant)
         }
-
-        let accessory = NSStackView(views: [titleLabel, titleField, quadrantLabel, quadrantPicker])
-        accessory.orientation = .vertical
-        accessory.alignment = .leading
-        accessory.spacing = 8
-        accessory.translatesAutoresizingMaskIntoConstraints = false
-
-        titleField.translatesAutoresizingMaskIntoConstraints = false
-        quadrantPicker.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            titleField.widthAnchor.constraint(equalToConstant: 320),
-            quadrantPicker.widthAnchor.constraint(equalTo: titleField.widthAnchor)
-        ])
-
-        alert.accessoryView = accessory
-        alert.window.initialFirstResponder = titleField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let trimmedTitle = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            showValidationError(message: "Task title is required.")
-            return
-        }
-
-        guard let rawValue = quadrantPicker.selectedItem?.representedObject as? String,
-              let quadrant = Quadrant(rawValue: rawValue) else {
-            showValidationError(message: "Please choose a quadrant.")
-            return
-        }
-
-        store.addTask(title: trimmedTitle, quadrant: quadrant)
+        presentAsSheet(form)
     }
 
     private func presentEditTaskDialog(taskID: String) {
         guard let task = store.task(id: taskID) else { return }
 
-        let alert = NSAlert()
-        alert.messageText = "Edit Task"
-        alert.informativeText = "Update the task title."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-
-        let titleField = NSTextField(string: task.title)
-        titleField.translatesAutoresizingMaskIntoConstraints = false
-        titleField.widthAnchor.constraint(equalToConstant: 320).isActive = true
-        alert.accessoryView = titleField
-        alert.window.initialFirstResponder = titleField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let trimmedTitle = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            showValidationError(message: "Task title is required.")
-            return
+        let form = TaskFormViewController(mode: .edit(task))
+        form.onSubmit = { [weak self] title, quadrant in
+            self?.store.updateTitle(id: taskID, newTitle: title)
+            if quadrant != task.quadrant {
+                self?.store.moveTask(id: taskID, to: quadrant)
+            }
         }
-
-        store.updateTitle(id: taskID, newTitle: trimmedTitle)
-    }
-
-    private func showValidationError(message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Validation Error"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        presentAsSheet(form)
     }
 }
 

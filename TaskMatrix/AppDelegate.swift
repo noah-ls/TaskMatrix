@@ -14,7 +14,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        // The UI uses a fixed light palette; keep system dark mode from mixing in.
+        NSApp.appearance = NSAppearance(named: .aqua)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
