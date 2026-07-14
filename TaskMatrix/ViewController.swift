@@ -310,8 +310,10 @@ private final class TaskRowView: NSView {
     var onEditRequested: (() -> Void)?
     var onMoveRequested: ((Quadrant) -> Void)?
     var onDeleteRequested: (() -> Void)?
+    var onSelectRequested: (() -> Void)?
 
     private let task: TaskItem
+    private let isSelected: Bool
     private var isHovering = false
     private var trackingAreaRef: NSTrackingArea?
 
@@ -325,8 +327,9 @@ private final class TaskRowView: NSView {
         return checkbox
     }()
 
-    init(task: TaskItem) {
+    init(task: TaskItem, isSelected: Bool) {
         self.task = task
+        self.isSelected = isSelected
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setupUI()
@@ -365,6 +368,12 @@ private final class TaskRowView: NSView {
         super.mouseExited(with: event)
         isHovering = false
         refreshContainerStyle()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onSelectRequested?()
+        // No super call: the click must not bubble to the background,
+        // which would immediately clear the selection it just made.
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -480,14 +489,15 @@ private final class TaskRowView: NSView {
     private func refreshContainerStyle() {
         guard let layer else { return }
 
-        let backgroundColor: NSColor
-        if task.isCompleted {
-            backgroundColor = .taskSurface
-        } else {
-            backgroundColor = isHovering ? .taskSurfaceHover : .taskSurface
+        if isSelected {
+            layer.borderWidth = 2
+            layer.borderColor = NSColor.taskAccentText.withAlphaComponent(0.7).cgColor
+            layer.backgroundColor = NSColor.taskAccent.withAlphaComponent(0.14).cgColor
+            return
         }
 
-        layer.backgroundColor = backgroundColor.cgColor
+        layer.borderWidth = 1
+        layer.backgroundColor = NSColor.taskSurface.cgColor
         layer.borderColor = (isHovering ? NSColor.taskAccent.withAlphaComponent(0.55) : NSColor.taskRing).cgColor
     }
 
@@ -569,10 +579,12 @@ private final class QuadrantCardView: NSView {
 
     func render(
         tasks: [TaskItem],
+        selectedTaskID: String?,
         onToggleCompleted: @escaping (String, Bool) -> Void,
         onEditRequested: @escaping (String) -> Void,
         onMoveRequested: @escaping (String, Quadrant) -> Void,
-        onDeleteRequested: @escaping (String) -> Void
+        onDeleteRequested: @escaping (String) -> Void,
+        onSelectRequested: @escaping (String) -> Void
     ) {
         listStack.arrangedSubviews.forEach { subview in
             listStack.removeArrangedSubview(subview)
@@ -591,7 +603,7 @@ private final class QuadrantCardView: NSView {
         }
 
         for task in sortedTasks {
-            let row = TaskRowView(task: task)
+            let row = TaskRowView(task: task, isSelected: task.id == selectedTaskID)
             row.onToggleCompleted = { isCompleted in
                 onToggleCompleted(task.id, isCompleted)
             }
@@ -603,6 +615,9 @@ private final class QuadrantCardView: NSView {
             }
             row.onDeleteRequested = {
                 onDeleteRequested(task.id)
+            }
+            row.onSelectRequested = {
+                onSelectRequested(task.id)
             }
             listStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: listStack.widthAnchor).isActive = true
@@ -1051,13 +1066,46 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
     }
 }
 
+/// Root view: first responder for the matrix, catches Delete presses and
+/// clicks on empty space (which clear the selection).
+private final class MatrixRootView: NSView {
+    var onDeleteKeyPressed: (() -> Void)?
+    var onBackgroundClicked: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        let backspaceKeyCode: UInt16 = 51
+        let forwardDeleteKeyCode: UInt16 = 117
+
+        if event.keyCode == backspaceKeyCode || event.keyCode == forwardDeleteKeyCode {
+            onDeleteKeyPressed?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onBackgroundClicked?()
+        super.mouseDown(with: event)
+    }
+}
+
 final class ViewController: NSViewController {
     private let store = TaskStore()
     private var quadrantViews: [Quadrant: QuadrantCardView] = [:]
     private var didInstallCommandN = false
+    private var selectedTaskID: String?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
+        let rootView = MatrixRootView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
+        rootView.onDeleteKeyPressed = { [weak self] in
+            self?.confirmAndDeleteSelectedTask()
+        }
+        rootView.onBackgroundClicked = { [weak self] in
+            self?.clearSelection()
+        }
+        view = rootView
     }
 
     override func viewDidLoad() {
@@ -1073,6 +1121,7 @@ final class ViewController: NSViewController {
 
         view.window?.title = "Task Matrix"
         view.window?.minSize = NSSize(width: 760, height: 560)
+        view.window?.makeFirstResponder(view)
     }
 
     private func setupRootUI() {
@@ -1188,6 +1237,7 @@ final class ViewController: NSViewController {
             let quadrantTasks = tasks.filter { $0.quadrant == quadrant }
             quadrantViews[quadrant]?.render(
                 tasks: quadrantTasks,
+                selectedTaskID: selectedTaskID,
                 onToggleCompleted: { [weak self] taskID, isCompleted in
                     self?.store.setTaskCompleted(id: taskID, isCompleted: isCompleted)
                 },
@@ -1199,8 +1249,45 @@ final class ViewController: NSViewController {
                 },
                 onDeleteRequested: { [weak self] taskID in
                     self?.store.deleteTask(id: taskID)
+                },
+                onSelectRequested: { [weak self] taskID in
+                    self?.selectTask(taskID)
                 }
             )
+        }
+    }
+
+    private func selectTask(_ taskID: String) {
+        guard selectedTaskID != taskID else { return }
+        selectedTaskID = taskID
+        view.window?.makeFirstResponder(view)
+        render(tasks: store.tasks)
+    }
+
+    private func clearSelection() {
+        guard selectedTaskID != nil else { return }
+        selectedTaskID = nil
+        render(tasks: store.tasks)
+    }
+
+    private func confirmAndDeleteSelectedTask() {
+        guard let taskID = selectedTaskID,
+              let task = store.task(id: taskID),
+              let window = view.window else {
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Delete Task?"
+        alert.informativeText = "\u{201C}\(task.title)\u{201D} will be deleted. This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")   // default button — Enter confirms
+        alert.addButton(withTitle: "Cancel")   // Esc cancels
+
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.selectedTaskID = nil
+            self?.store.deleteTask(id: taskID)
         }
     }
 

@@ -15,7 +15,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **2×2 matrix view** — all four quadrants visible at once, each with its own scrollable task list and task count
 - **Edit in place** — double-click a task to rename it
 - **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
-- **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom), right-click → *Delete* to remove
+- **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
 - **Auto-save** — every change is persisted immediately; no manual save
 
 ## Persistence
