@@ -61,6 +61,19 @@ private enum Quadrant: String, CaseIterable, Codable {
             return NSColor(red: 0.608, green: 0.627, blue: 0.588, alpha: 1)   // gray — drop
         }
     }
+
+    var surfaceColor: NSColor {
+        switch self {
+        case .q1:
+            return NSColor(red: 0.996, green: 0.949, blue: 0.941, alpha: 1)   // soft red
+        case .q2:
+            return NSColor(red: 0.945, green: 0.977, blue: 0.925, alpha: 1)   // soft green
+        case .q3:
+            return NSColor(red: 0.996, green: 0.969, blue: 0.902, alpha: 1)   // soft amber
+        case .q4:
+            return NSColor(red: 0.949, green: 0.953, blue: 0.941, alpha: 1)   // soft gray
+        }
+    }
 }
 
 private struct TaskItem: Codable, Equatable {
@@ -597,7 +610,7 @@ private final class QuadrantCardView: NSView {
     private func setupUI() {
         wantsLayer = true
         layer?.cornerRadius = 16
-        layer?.backgroundColor = NSColor.taskCard.cgColor
+        layer?.backgroundColor = quadrant.surfaceColor.cgColor
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.taskRing.cgColor
 
@@ -730,8 +743,8 @@ private final class QuadrantCardView: NSView {
         layer?.borderWidth = isActive ? 2 : 1
         layer?.borderColor = (isActive ? quadrant.accentColor : NSColor.taskRing).cgColor
         layer?.backgroundColor = (isActive
-            ? quadrant.accentColor.withAlphaComponent(0.06)
-            : NSColor.taskCard).cgColor
+            ? quadrant.accentColor.withAlphaComponent(0.16)
+            : quadrant.surfaceColor).cgColor
     }
 }
 
@@ -1235,7 +1248,6 @@ final class ViewController: NSViewController {
 
 private extension NSColor {
     static let taskCanvas = NSColor(red: 0.957, green: 0.961, blue: 0.945, alpha: 1)
-    static let taskCard = NSColor.white
 
     static let taskInk = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 1)
     static let taskMuted = NSColor(red: 0.42, green: 0.45, blue: 0.41, alpha: 1)
@@ -1244,6 +1256,6 @@ private extension NSColor {
     static let taskAccentText = NSColor(red: 0.086, green: 0.200, blue: 0.0, alpha: 1)
 
     static let taskRing = NSColor(red: 0.055, green: 0.059, blue: 0.047, alpha: 0.10)
-    static let taskSurface = NSColor(red: 0.975, green: 0.978, blue: 0.968, alpha: 1)
-    static let taskSurfaceHover = NSColor(red: 0.960, green: 0.982, blue: 0.930, alpha: 1)
+    static let taskSurface = NSColor.white
+    static let taskSurfaceHover = NSColor.white
 }
