@@ -110,16 +110,15 @@ Acceptance:
 
 ## 5. File-Level Layout (Actual)
 
-The MVP kept the minimal single-file structure. Everything lives in
-`TaskMatrix/ViewController.swift`:
+The code is split into layers (extracted once the single file grew past
+~1,500 lines with the subtask feature):
 
-- `Quadrant` enum and `TaskItem` model (Codable)
-- `TaskStore` (JSON load/save in Application Support, CRUD, change callback)
-- `TaskRowView`, `QuadrantCardView`, `HoverScaleButton` (UI)
-- `ViewController` (matrix layout, add/edit dialogs, `Cmd+N` wiring)
-
-Extracting into `Models/`, `Storage/`, and `UI/` modules remains an option if
-the file grows further.
+- `Models/Quadrant.swift`, `Models/TaskItem.swift` — Codable models
+- `Storage/TaskStore.swift` — JSON persistence and task/subtask CRUD
+- `UI/` — theme, pill button, matrix root view, quadrant card, task and
+  subtask rows, quadrant picker, and the task form sheet
+- `ViewController.swift` — main controller: layout, selection, rendering,
+  and sheet presentation
 
 ## 6. Test Plan (Manual MVP)
 

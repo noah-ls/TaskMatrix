@@ -45,15 +45,26 @@ Then build and run the `TaskMatrix` scheme (⌘R).
 ```
 TaskMatrix/
 ├── TaskMatrix/
-│   ├── AppDelegate.swift        # App lifecycle
-│   ├── ViewController.swift     # Everything else: models, store, and UI
-│   │                            #   - Quadrant / TaskItem models
-│   │                            #   - TaskStore (JSON load/save, CRUD)
-│   │                            #   - QuadrantCardView / TaskRowView
+│   ├── AppDelegate.swift              # App lifecycle, light appearance
+│   ├── ViewController.swift           # Main controller: layout, selection, sheets
+│   ├── Models/
+│   │   ├── Quadrant.swift             # Quadrant enum (titles, strategy)
+│   │   └── TaskItem.swift             # TaskItem + SubTask models (Codable)
+│   ├── Storage/
+│   │   └── TaskStore.swift            # JSON load/save, task + subtask CRUD
+│   ├── UI/
+│   │   ├── Theme.swift                # Colors, quadrant accents, pasteboard type
+│   │   ├── PillButton.swift           # Pill CTA with hover/press scale
+│   │   ├── MatrixRootView.swift       # Key handling, background clicks
+│   │   ├── QuadrantCardView.swift     # Quadrant card, task list, drop target
+│   │   ├── TaskRowView.swift          # Task card with expandable subtasks
+│   │   ├── SubtaskRowView.swift       # Indented subtask line
+│   │   ├── QuadrantPicker.swift       # 2x2 quadrant tiles for the form
+│   │   └── TaskFormViewController.swift  # Create/edit sheet (tasks + subtasks)
 │   └── Base.lproj/Main.storyboard
-├── task_matrix_requirements.md  # Product requirements
-├── IMPLEMENTATION_PLAN.md       # Milestone plan
-└── DESIGN.md                    # Visual design reference (Wise-inspired)
+├── task_matrix_requirements.md        # Product requirements
+├── IMPLEMENTATION_PLAN.md             # Milestone plan
+└── DESIGN.md                          # Visual design reference (Wise-inspired)
 ```
 
 ## Design
