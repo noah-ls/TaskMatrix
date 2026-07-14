@@ -1506,6 +1506,10 @@ private final class TaskFormViewController: NSViewController, NSTextFieldDelegat
 
         selectQuadrant(selectedQuadrant)
         refreshSubmitEnabled()
+
+        // Size the sheet from the constraint chain; the subtask variant is
+        // much shorter than the task variant with its quadrant picker.
+        preferredContentSize = view.fittingSize
     }
 
     override func viewDidAppear() {
