@@ -7,6 +7,7 @@ struct TaskListActions {
     let move: (String, Quadrant) -> Void
     let delete: (String) -> Void
     let select: (String) -> Void
+    let setDueDate: (String, Date?) -> Void
     let addSubtask: (String) -> Void
     let toggleSubtask: (String, String, Bool) -> Void
     let editSubtask: (String, String) -> Void
@@ -102,6 +103,9 @@ final class QuadrantCardView: NSView {
             }
             row.onSelectRequested = {
                 actions.select(task.id)
+            }
+            row.onSetDueDate = { dueDate in
+                actions.setDueDate(task.id, dueDate)
             }
             row.onAddSubtaskRequested = {
                 actions.addSubtask(task.id)

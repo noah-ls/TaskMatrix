@@ -166,6 +166,9 @@ final class ViewController: NSViewController {
             select: { [weak self] taskID in
                 self?.selectTask(taskID)
             },
+            setDueDate: { [weak self] taskID, dueDate in
+                self?.store.updateDueDate(id: taskID, dueDate: dueDate)
+            },
             addSubtask: { [weak self] taskID in
                 self?.presentAddSubtaskDialog(taskID: taskID)
             },

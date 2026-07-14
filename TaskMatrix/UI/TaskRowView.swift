@@ -8,6 +8,7 @@ final class TaskRowView: NSView {
     var onMoveRequested: ((Quadrant) -> Void)?
     var onDeleteRequested: (() -> Void)?
     var onSelectRequested: (() -> Void)?
+    var onSetDueDate: ((Date?) -> Void)?
     var onAddSubtaskRequested: (() -> Void)?
     var onToggleSubtask: ((String, Bool) -> Void)?
     var onEditSubtask: ((String) -> Void)?
@@ -118,6 +119,39 @@ final class TaskRowView: NSView {
         let addSubtaskItem = NSMenuItem(title: "Add Subtask…", action: #selector(handleAddSubtask(_:)), keyEquivalent: "")
         addSubtaskItem.target = self
         menu.addItem(addSubtaskItem)
+        menu.addItem(.separator())
+
+        let dueDateMenuItem = NSMenuItem(title: "Due Date", action: nil, keyEquivalent: "")
+        let dueDateMenu = NSMenu(title: "Due Date")
+
+        let today = Calendar.current.startOfDay(for: Date())
+        let quickPicks: [(String, Date)] = [
+            ("Today", today),
+            ("Tomorrow", Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today),
+            ("Next Week", Calendar.current.date(byAdding: .day, value: 7, to: today) ?? today)
+        ]
+
+        for (label, date) in quickPicks {
+            let item = NSMenuItem(title: label, action: #selector(handleSetDueDate(_:)), keyEquivalent: "")
+            item.representedObject = date
+            item.target = self
+            item.state = task.dueDate == date ? .on : .off
+            dueDateMenu.addItem(item)
+        }
+
+        let customItem = NSMenuItem(title: "Custom…", action: #selector(handleCustomDueDate(_:)), keyEquivalent: "")
+        customItem.target = self
+        dueDateMenu.addItem(customItem)
+
+        if task.dueDate != nil {
+            dueDateMenu.addItem(.separator())
+            let clearItem = NSMenuItem(title: "Clear Due Date", action: #selector(handleSetDueDate(_:)), keyEquivalent: "")
+            clearItem.target = self
+            dueDateMenu.addItem(clearItem)
+        }
+
+        dueDateMenuItem.submenu = dueDateMenu
+        menu.addItem(dueDateMenuItem)
         menu.addItem(.separator())
 
         let moveMenuItem = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
@@ -360,6 +394,18 @@ final class TaskRowView: NSView {
     @objc
     private func handleAddSubtask(_ sender: NSMenuItem) {
         onAddSubtaskRequested?()
+    }
+
+    @objc
+    private func handleSetDueDate(_ sender: NSMenuItem) {
+        // representedObject carries the date; nil (the Clear item) clears it.
+        onSetDueDate?(sender.representedObject as? Date)
+    }
+
+    @objc
+    private func handleCustomDueDate(_ sender: NSMenuItem) {
+        // The edit sheet has the full calendar picker.
+        onEditRequested?()
     }
 
     @objc

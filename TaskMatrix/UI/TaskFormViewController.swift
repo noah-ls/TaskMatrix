@@ -162,24 +162,21 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
         checkbox.state = initialDueDate == nil ? .off : .on
         dueDateCheckbox = checkbox
 
+        // Graphical calendar — pick a day with one click, no digit entry.
         let datePicker = NSDatePicker()
         datePicker.translatesAutoresizingMaskIntoConstraints = false
-        datePicker.datePickerStyle = .textFieldAndStepper
+        datePicker.datePickerStyle = .clockAndCalendar
         datePicker.datePickerElements = .yearMonthDay
         datePicker.dateValue = initialDueDate ?? Date()
         datePicker.isEnabled = initialDueDate != nil
+        datePicker.isHidden = initialDueDate == nil
         dueDatePicker = datePicker
 
-        let dueDateSpacer = NSView()
-        dueDateSpacer.translatesAutoresizingMaskIntoConstraints = false
-        dueDateSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        dueDateSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let dueDateRow = NSStackView(views: [checkbox, datePicker, dueDateSpacer])
+        let dueDateRow = NSStackView(views: [checkbox, datePicker])
         dueDateRow.translatesAutoresizingMaskIntoConstraints = false
-        dueDateRow.orientation = .horizontal
-        dueDateRow.alignment = .centerY
-        dueDateRow.spacing = 10
+        dueDateRow.orientation = .vertical
+        dueDateRow.alignment = .leading
+        dueDateRow.spacing = 8
 
         let cancelButton = PillButton(
             title: "Cancel",
@@ -315,7 +312,12 @@ final class TaskFormViewController: NSViewController, NSTextFieldDelegate {
 
     @objc
     private func handleDueDateToggle(_ sender: NSButton) {
-        dueDatePicker?.isEnabled = sender.state == .on
+        let isOn = sender.state == .on
+        dueDatePicker?.isEnabled = isOn
+        dueDatePicker?.isHidden = !isOn
+        // The calendar takes real vertical space; let the sheet grow and
+        // shrink with it.
+        preferredContentSize = view.fittingSize
     }
 
     @objc
