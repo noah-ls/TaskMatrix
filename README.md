@@ -11,7 +11,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 
 ## Features
 
-- **Quick create** — add a task via the `+ New Task` button or `⌘N`, picking a title and quadrant
+- **Quick create** — add a task via the `+ New Task` button, `⌘N`, or the `+` button on any quadrant card (which preselects that quadrant); in the form, Tab moves from the title to the quadrant picker and cycles it, Enter submits, Esc cancels
 - **2×2 matrix view** — all four quadrants visible at once, each with its own scrollable task list and task count
 - **Edit in place** — double-click a task to rename it
 - **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
@@ -22,13 +22,16 @@ Tasks live in a single window, organized into four quadrants by importance and u
 
 ## Persistence
 
-Tasks are stored locally as JSON at:
+Tasks are stored locally as JSON. The app is sandboxed, so the file lives in
+its container:
 
 ```
-~/Library/Application Support/TaskMatrix/tasks.json
+~/Library/Containers/<bundle-id>/Data/Library/Application Support/TaskMatrix/tasks.json
 ```
 
-Writes are atomic; there is no sync, no account, no network access.
+Writes are atomic; there is no sync, no account, no network access. Saves
+from older versions load unchanged — newer optional fields (subtasks, due
+date) default gracefully.
 
 ## Requirements & Building
 

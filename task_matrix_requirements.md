@@ -121,6 +121,12 @@ SubTask {
 - Tags  
 - Analytics  
 
+### Post-MVP additions (implemented)
+- Subtasks: per-task checklist with progress, expand/collapse
+- Due dates: optional date-only deadline with overdue/today indication
+- Task selection + Delete-key removal (with confirmation)
+- Per-quadrant quick-add buttons
+
 ---
 
 ## 8. UX Principles

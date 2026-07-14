@@ -2,9 +2,12 @@
 
 Source requirements: [task_matrix_requirements.md](./task_matrix_requirements.md)
 
-> **Status (July 2026):** Milestones 1–4 and most of 5 are implemented in
-> `TaskMatrix/ViewController.swift`. Remaining: manual validation of the
-> end-to-end flow and drag-and-drop stress test (plan section 6).
+> **Status (July 2026):** All milestones are implemented, and the app has
+> grown beyond the MVP: redesigned UI with custom form sheets, task
+> selection with keyboard delete, subtasks, and optional due dates. The
+> code is split into Models/Storage/UI layers (section 5). Remaining:
+> manual validation of the end-to-end flow and drag-and-drop stress test
+> (plan section 6).
 
 ## 1. Goal and Scope
 
