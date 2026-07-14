@@ -26,6 +26,7 @@ final class TaskRowView: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let progressLabel = NSTextField(labelWithString: "")
     private let dueLabel = NSTextField(labelWithString: "")
+    private let dueBadge = NSView()
     private lazy var completeCheckbox: NSButton = {
         let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(handleCheckboxChange(_:)))
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -166,6 +167,9 @@ final class TaskRowView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.borderWidth = 1
+        // Clip so subtask rows can't draw outside the card while the
+        // collapse animation shrinks it.
+        layer?.masksToBounds = true
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.lineBreakMode = .byTruncatingTail
@@ -180,8 +184,21 @@ final class TaskRowView: NSView {
 
         if task.dueDate != nil {
             dueLabel.translatesAutoresizingMaskIntoConstraints = false
-            dueLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-            headerViews.append(dueLabel)
+            dueLabel.font = .systemFont(ofSize: 10.5, weight: .bold)
+
+            dueBadge.translatesAutoresizingMaskIntoConstraints = false
+            dueBadge.wantsLayer = true
+            dueBadge.layer?.cornerRadius = 9
+            dueBadge.addSubview(dueLabel)
+
+            NSLayoutConstraint.activate([
+                dueLabel.leadingAnchor.constraint(equalTo: dueBadge.leadingAnchor, constant: 8),
+                dueLabel.trailingAnchor.constraint(equalTo: dueBadge.trailingAnchor, constant: -8),
+                dueLabel.topAnchor.constraint(equalTo: dueBadge.topAnchor, constant: 3),
+                dueLabel.bottomAnchor.constraint(equalTo: dueBadge.bottomAnchor, constant: -3)
+            ])
+
+            headerViews.append(dueBadge)
         }
 
         if !task.subtasks.isEmpty {
@@ -277,15 +294,24 @@ final class TaskRowView: NSView {
             dueLabel.stringValue = DueDateFormatting.shortLabel(for: dueDate)
 
             let calendar = Calendar.current
+            let textColor: NSColor
+            let badgeColor: NSColor
             if task.isCompleted {
-                dueLabel.textColor = NSColor.taskMuted
+                textColor = NSColor.taskMuted
+                badgeColor = NSColor.taskInk.withAlphaComponent(0.05)
             } else if dueDate < calendar.startOfDay(for: Date()) {
-                dueLabel.textColor = NSColor.taskOverdue
+                textColor = NSColor.taskOverdue
+                badgeColor = NSColor.taskOverdue.withAlphaComponent(0.12)
             } else if calendar.isDateInToday(dueDate) {
-                dueLabel.textColor = NSColor.taskDueToday
+                textColor = NSColor.taskDueToday
+                badgeColor = NSColor.taskDueToday.withAlphaComponent(0.14)
             } else {
-                dueLabel.textColor = NSColor.taskMuted
+                textColor = NSColor.taskMuted
+                badgeColor = NSColor.taskInk.withAlphaComponent(0.06)
             }
+
+            dueLabel.textColor = textColor
+            dueBadge.layer?.backgroundColor = badgeColor.cgColor
         }
 
         if task.isCompleted {
