@@ -16,6 +16,10 @@ struct TaskItem: Codable, Equatable {
     var dueDate: Date?
     /// When the task was checked off; nil while it is open.
     var completedAt: Date?
+    /// User-defined sort order within the task's completion state and quadrant;
+    /// nil means use createdAt. When dragging to reorder, we assign explicit
+    /// order values to the affected tasks.
+    var order: Double?
     var subtasks: [SubTask]
 
     init(
@@ -26,6 +30,7 @@ struct TaskItem: Codable, Equatable {
         createdAt: Date,
         dueDate: Date? = nil,
         completedAt: Date? = nil,
+        order: Double? = nil,
         subtasks: [SubTask] = []
     ) {
         self.id = id
@@ -35,6 +40,7 @@ struct TaskItem: Codable, Equatable {
         self.createdAt = createdAt
         self.dueDate = dueDate
         self.completedAt = completedAt
+        self.order = order
         self.subtasks = subtasks
     }
 
@@ -48,6 +54,7 @@ struct TaskItem: Codable, Equatable {
         // Older saves predate these fields; default gracefully.
         dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        order = try container.decodeIfPresent(Double.self, forKey: .order)
         subtasks = try container.decodeIfPresent([SubTask].self, forKey: .subtasks) ?? []
     }
 }

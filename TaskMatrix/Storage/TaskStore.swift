@@ -55,6 +55,36 @@ final class TaskStore {
         persistAndNotify()
     }
 
+    func reorderTask(id: String, beforeID: String?) {
+        guard let fromIndex = tasks.firstIndex(where: { $0.id == id }) else { return }
+        let task = tasks[fromIndex]
+
+        let toIndex: Int
+        if let beforeID = beforeID, let idx = tasks.firstIndex(where: { $0.id == beforeID }) {
+            toIndex = idx
+        } else {
+            toIndex = tasks.count
+        }
+
+        guard toIndex != fromIndex && toIndex != fromIndex + 1 else { return }
+
+        tasks.remove(at: fromIndex)
+        let insertIndex = toIndex > fromIndex ? toIndex - 1 : toIndex
+        tasks.insert(task, at: insertIndex)
+
+        // Assign explicit order values to tasks with the same completion state
+        // and quadrant so they sort consistently when not dragging.
+        let sameGroupIndices = tasks.indices.filter { i in
+            tasks[i].isCompleted == task.isCompleted && tasks[i].quadrant == task.quadrant
+        }
+
+        for (rank, idx) in sameGroupIndices.enumerated() {
+            tasks[idx].order = Double(rank)
+        }
+
+        persistAndNotify()
+    }
+
     func updateTitle(id: String, newTitle: String) {
         let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }

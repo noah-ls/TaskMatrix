@@ -8,6 +8,7 @@ struct TaskListActions {
     let delete: (String) -> Void
     let select: (String) -> Void
     let setDueDate: (String, Date?) -> Void
+    let reorder: ((String, String?) -> Void)?
     let addSubtask: (String) -> Void
     let toggleSubtask: (String, String, Bool) -> Void
     let editSubtask: (String, String) -> Void
@@ -80,10 +81,21 @@ final class QuadrantCardView: NSView {
             if lhs.isCompleted != rhs.isCompleted {
                 return !lhs.isCompleted
             }
+            // Within the same completion state, sort by explicit order first,
+            // then by creation time as a fallback.
+            if let lOrder = lhs.order, let rOrder = rhs.order {
+                return lOrder < rOrder
+            }
+            if lhs.order != nil {
+                return true
+            }
+            if rhs.order != nil {
+                return false
+            }
             return lhs.createdAt < rhs.createdAt
         }
 
-        for task in sortedTasks {
+        for (index, task) in sortedTasks.enumerated() {
             let row = TaskRowView(
                 task: task,
                 isSelected: task.id == selectedTaskID,
@@ -97,6 +109,11 @@ final class QuadrantCardView: NSView {
             }
             row.onMoveRequested = { destination in
                 actions.move(task.id, destination)
+            }
+            row.onReorderRequested = { beforeTaskID in
+                if let reorder = actions.reorder {
+                    reorder(task.id, beforeTaskID)
+                }
             }
             row.onDeleteRequested = {
                 actions.delete(task.id)
