@@ -244,7 +244,9 @@ final class QuadrantCardView: NSView {
         emptyStateLabel.font = .systemFont(ofSize: 12, weight: .medium)
         emptyStateLabel.textColor = NSColor.taskMuted.withAlphaComponent(0.75)
 
-        let contentView = NSView()
+        // Flipped so the list is anchored at the top: an overflowing list
+        // scrolls down from the first row rather than up from the last.
+        let contentView = FlippedView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(listStack)
         contentView.addSubview(emptyStateLabel)
@@ -255,12 +257,20 @@ final class QuadrantCardView: NSView {
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        // Overlay scrollers stay hidden until the user actually scrolls.
+        scrollView.scrollerStyle = .overlay
         scrollView.documentView = contentView
 
         addSubview(headerRow)
         addSubview(subtitleLabel)
         addSubview(separator)
         addSubview(scrollView)
+
+        // Drives the document view's height from the task list so it can grow
+        // taller than the clip view (and scroll). High but not required, so it
+        // yields to the empty-state label's minimum height when the list is empty.
+        let listStackBottom = listStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4)
+        listStackBottom.priority = NSLayoutConstraint.Priority(999)
 
         NSLayoutConstraint.activate([
             dot.widthAnchor.constraint(equalToConstant: 10),
@@ -292,19 +302,21 @@ final class QuadrantCardView: NSView {
             scrollView.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
 
+            // Pin the document view on three sides + width to the clip view, but
+            // NOT its bottom — its height comes from the list, letting it scroll.
             contentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             contentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
             contentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
             contentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
 
             listStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 4),
             listStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
             listStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
-            listStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -4),
+            listStackBottom,
 
             emptyStateLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
-            emptyStateLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4)
+            emptyStateLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            emptyStateLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -4)
         ])
     }
 
@@ -320,4 +332,10 @@ final class QuadrantCardView: NSView {
             ? quadrant.accentColor.withAlphaComponent(0.16)
             : quadrant.surfaceColor).cgColor
     }
+}
+
+/// Top-left origin container used as a scroll view's document view so its
+/// content lays out from the top down.
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
