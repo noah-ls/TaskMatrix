@@ -58,6 +58,8 @@ final class PillButton: NSButton {
         if let icon {
             image = icon
             imagePosition = .imageLeading
+            // Keep the icon next to the title, not pinned to the pill's edge.
+            imageHugsTitle = true
             contentTintColor = textColor
         }
 
