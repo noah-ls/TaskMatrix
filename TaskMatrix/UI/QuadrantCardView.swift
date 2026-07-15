@@ -8,7 +8,6 @@ struct TaskListActions {
     let delete: (String) -> Void
     let select: (String) -> Void
     let setDueDate: (String, Date?) -> Void
-    let reorder: ((String, String?) -> Void)?
     let addSubtask: (String) -> Void
     let toggleSubtask: (String, String, Bool) -> Void
     let editSubtask: (String, String) -> Void
@@ -19,12 +18,17 @@ struct TaskListActions {
 /// One quadrant of the matrix: tinted card, header with add button and
 /// open-task count, scrollable task list, and drag & drop target.
 final class QuadrantCardView: NSView {
-    var onTaskDropped: ((String) -> Void)?
+    /// (droppedTaskID, beforeTaskID) — beforeTaskID is the open task the drop
+    /// landed above, or nil to append to the end of the list.
+    var onTaskDropped: ((String, String?) -> Void)?
     var onAddRequested: (() -> Void)?
 
     private let listStack = NSStackView()
     private let emptyStateLabel = NSTextField(labelWithString: "No tasks — drag one here")
     private let countLabel = NSTextField(labelWithString: "0")
+
+    /// Open task rows in visual order, for hit-testing drop positions.
+    private var openRows: [(id: String, view: NSView)] = []
 
     private let quadrant: Quadrant
 
@@ -58,8 +62,22 @@ final class QuadrantCardView: NSView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         setDropHighlight(false)
         guard let taskID = sender.draggingPasteboard.string(forType: .taskID) else { return false }
-        onTaskDropped?(taskID)
+        let beforeID = beforeTaskID(forDropAt: sender.draggingLocation, dragging: taskID)
+        onTaskDropped?(taskID, beforeID)
         return true
+    }
+
+    /// Finds the open task the drop landed above. Window base coordinates are
+    /// always y-up, so the first row (top → bottom) whose center is below the
+    /// drop point is the insertion target; nil means append at the end.
+    private func beforeTaskID(forDropAt windowPoint: NSPoint, dragging draggedID: String) -> String? {
+        for row in openRows where row.id != draggedID {
+            let rowMidY = row.view.convert(NSPoint(x: 0, y: row.view.bounds.midY), to: nil).y
+            if windowPoint.y > rowMidY {
+                return row.id
+            }
+        }
+        return nil
     }
 
     func render(
@@ -72,6 +90,7 @@ final class QuadrantCardView: NSView {
             listStack.removeArrangedSubview(subview)
             subview.removeFromSuperview()
         }
+        openRows.removeAll()
 
         let openCount = tasks.filter { !$0.isCompleted }.count
         emptyStateLabel.isHidden = !tasks.isEmpty
@@ -95,12 +114,15 @@ final class QuadrantCardView: NSView {
             return lhs.createdAt < rhs.createdAt
         }
 
-        for (index, task) in sortedTasks.enumerated() {
+        for task in sortedTasks {
             let row = TaskRowView(
                 task: task,
                 isSelected: task.id == selectedTaskID,
                 isExpanded: !collapsedTaskIDs.contains(task.id)
             )
+            if !task.isCompleted {
+                openRows.append((id: task.id, view: row))
+            }
             row.onToggleCompleted = { isCompleted in
                 actions.toggleCompleted(task.id, isCompleted)
             }
@@ -109,11 +131,6 @@ final class QuadrantCardView: NSView {
             }
             row.onMoveRequested = { destination in
                 actions.move(task.id, destination)
-            }
-            row.onReorderRequested = { beforeTaskID in
-                if let reorder = actions.reorder {
-                    reorder(task.id, beforeTaskID)
-                }
             }
             row.onDeleteRequested = {
                 actions.delete(task.id)

@@ -14,7 +14,7 @@ Tasks live in a single window, organized into four quadrants by importance and u
 - **Quick create** — add a task via the `+ New Task` button, `⌘N`, or the `+` button on any quadrant card (which preselects that quadrant); in the form, Tab moves from the title to the quadrant picker and cycles it, Enter submits, Esc cancels
 - **2×2 matrix view** — all four quadrants visible at once, each with its own scrollable task list and task count
 - **Edit in place** — double-click a task to rename it
-- **Move between quadrants** — drag a task onto another quadrant, or right-click → *Move to*
+- **Move & reorder by dragging** — drag a task onto another quadrant to move it, or drag it up/down within its own quadrant to reorder; the drop position (above or below a row) decides where it lands. Custom order persists. Right-click → *Move to* also works
 - **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
 - **Subtasks** — right-click a task → *Add Subtask…* to break it into steps; check steps off individually (the parent shows `done/total` progress), collapse/expand the list with the chevron, and rename or delete via right-click. Completing the parent completes all its subtasks
 - **Due dates** — optionally set a date-only deadline (off by default): click *Add Due Date…* in the task form or right-click a task → *Set Due Date…*; both open a styled calendar popover where one click picks the day. The task shows a due badge ("Today", "Tomorrow", or the date) that turns red when overdue and amber when due today; clear it via the ✕ in the form or right-click → *Clear Due Date*

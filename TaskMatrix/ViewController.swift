@@ -142,8 +142,8 @@ final class ViewController: NSViewController {
 
     private func makeQuadrantCard(for quadrant: Quadrant) -> QuadrantCardView {
         let card = QuadrantCardView(quadrant: quadrant)
-        card.onTaskDropped = { [weak self] taskID in
-            self?.store.moveTask(id: taskID, to: quadrant)
+        card.onTaskDropped = { [weak self] taskID, beforeID in
+            self?.store.moveTask(id: taskID, to: quadrant, beforeID: beforeID)
         }
         card.onAddRequested = { [weak self] in
             self?.presentAddTaskDialog(preselected: quadrant)
