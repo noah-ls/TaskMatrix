@@ -60,6 +60,22 @@ open TaskMatrix.xcodeproj
 
 Then build and run the `TaskMatrix` scheme (⌘R).
 
+## Testing
+
+Unit tests cover the pure logic — models, storage, statistics, and formatting —
+in a standalone logic-test target (no host app needed). Run them with:
+
+```sh
+xcodebuild test -project TaskMatrix.xcodeproj -scheme TaskMatrixTests -destination 'platform=macOS'
+```
+
+or press ⌘U in Xcode. Coverage includes `Quadrant`, `TaskItem` Codable
+(including backward-compatible decoding of older saves), `DueDateFormatting`,
+`StatsCalculator`, and `TaskStore` CRUD, subtask cascade, drag-reorder, and
+persistence. `TaskStore` takes an injectable storage directory and a
+`syncsToCloud` flag so tests run against a temp directory without touching real
+data or iCloud.
+
 ## Project Structure
 
 ```
@@ -82,6 +98,7 @@ TaskMatrix/
 │   │   ├── QuadrantPicker.swift       # 2x2 quadrant tiles for the form
 │   │   └── TaskFormViewController.swift  # Create/edit sheet (tasks + subtasks)
 │   └── Base.lproj/Main.storyboard
+├── TaskMatrixTests/                   # Unit tests (logic-test target)
 ├── task_matrix_requirements.md        # Product requirements
 ├── IMPLEMENTATION_PLAN.md             # Milestone plan
 └── DESIGN.md                          # Visual design reference (Wise-inspired)

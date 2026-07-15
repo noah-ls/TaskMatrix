@@ -6,12 +6,22 @@ final class TaskStore {
     private(set) var tasks: [TaskItem] = []
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
-    private let cloudSync = TaskCloudSync()
+    private let cloudSync: TaskCloudSync?
+    /// When set, tasks.json lives here instead of Application Support. Used by
+    /// tests to isolate storage in a temporary directory.
+    private let storageDirectoryOverride: URL?
     /// Timestamp of the copy we hold; used to decide whether an iCloud
     /// payload is newer than local state (last writer wins).
     private var lastLocalUpdate = Date.distantPast
 
-    init() {
+    /// - Parameters:
+    ///   - storageDirectory: overrides the on-disk location (default:
+    ///     Application Support/TaskMatrix). Tests pass a temp directory.
+    ///   - syncsToCloud: when false, skips iCloud entirely (default: true).
+    init(storageDirectory: URL? = nil, syncsToCloud: Bool = true) {
+        storageDirectoryOverride = storageDirectory
+        cloudSync = syncsToCloud ? TaskCloudSync() : nil
+
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -23,10 +33,10 @@ final class TaskStore {
 
         // Adopt a newer copy from iCloud at launch, then track pushes
         // arriving from other devices while running.
-        if let envelope = cloudSync.currentEnvelope() {
+        if let cloudSync, let envelope = cloudSync.currentEnvelope() {
             adoptIfNewer(envelope)
         }
-        cloudSync.onRemoteChange = { [weak self] envelope in
+        cloudSync?.onRemoteChange = { [weak self] envelope in
             self?.adoptIfNewer(envelope)
         }
     }
@@ -166,7 +176,7 @@ final class TaskStore {
     private func persistAndNotify() {
         lastLocalUpdate = Date()
         save()
-        cloudSync.push(tasks: tasks, updatedAt: lastLocalUpdate)
+        cloudSync?.push(tasks: tasks, updatedAt: lastLocalUpdate)
         onChange?(tasks)
     }
 
@@ -215,9 +225,14 @@ final class TaskStore {
 
     private func storageURL() -> URL {
         let fileManager = FileManager.default
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let directory = appSupport.appendingPathComponent("TaskMatrix", isDirectory: true)
+        let directory: URL
+        if let storageDirectoryOverride {
+            directory = storageDirectoryOverride
+        } else {
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            directory = appSupport.appendingPathComponent("TaskMatrix", isDirectory: true)
+        }
 
         if !fileManager.fileExists(atPath: directory.path) {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)

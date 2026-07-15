@@ -6,14 +6,35 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B11100000000000000000001 /* Quadrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000001 /* Quadrant.swift */; };
+		B11100000000000000000002 /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000002 /* TaskItem.swift */; };
+		B11100000000000000000003 /* StatsCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000003 /* StatsCalculator.swift */; };
+		B11100000000000000000004 /* DueDateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000004 /* DueDateFormatting.swift */; };
+		B11100000000000000000005 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000005 /* TaskStore.swift */; };
+		B11100000000000000000006 /* TaskCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00000000000000000006 /* TaskCloudSync.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		9D56088A2F87B393000FACD8 /* TaskMatrix.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TaskMatrix.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CA5E00000000000000000001 /* Quadrant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Quadrant.swift; path = TaskMatrix/Models/Quadrant.swift; sourceTree = "<group>"; };
+		CA5E00000000000000000002 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaskItem.swift; path = TaskMatrix/Models/TaskItem.swift; sourceTree = "<group>"; };
+		CA5E00000000000000000003 /* StatsCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatsCalculator.swift; path = TaskMatrix/Stats/StatsCalculator.swift; sourceTree = "<group>"; };
+		CA5E00000000000000000004 /* DueDateFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DueDateFormatting.swift; path = TaskMatrix/UI/DueDateFormatting.swift; sourceTree = "<group>"; };
+		CA5E00000000000000000005 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaskStore.swift; path = TaskMatrix/Storage/TaskStore.swift; sourceTree = "<group>"; };
+		CA5E00000000000000000006 /* TaskCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TaskCloudSync.swift; path = TaskMatrix/Storage/TaskCloudSync.swift; sourceTree = "<group>"; };
+		DDDD00000000000000000002 /* TaskMatrixTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaskMatrixTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9D56088C2F87B393000FACD8 /* TaskMatrix */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TaskMatrix;
+			sourceTree = "<group>";
+		};
+		DDDD00000000000000000001 /* TaskMatrixTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TaskMatrixTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +54,8 @@
 			isa = PBXGroup;
 			children = (
 				9D56088C2F87B393000FACD8 /* TaskMatrix */,
+				DDDD00000000000000000001 /* TaskMatrixTests */,
+				DDDD00000000000000000008 /* SharedTestSources */,
 				9D56088B2F87B393000FACD8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +64,22 @@
 			isa = PBXGroup;
 			children = (
 				9D56088A2F87B393000FACD8 /* TaskMatrix.app */,
+				DDDD00000000000000000002 /* TaskMatrixTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DDDD00000000000000000008 /* SharedTestSources */ = {
+			isa = PBXGroup;
+			children = (
+				CA5E00000000000000000001 /* Quadrant.swift */,
+				CA5E00000000000000000002 /* TaskItem.swift */,
+				CA5E00000000000000000003 /* StatsCalculator.swift */,
+				CA5E00000000000000000004 /* DueDateFormatting.swift */,
+				CA5E00000000000000000005 /* TaskStore.swift */,
+				CA5E00000000000000000006 /* TaskCloudSync.swift */,
+			);
+			name = SharedTestSources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -70,6 +107,26 @@
 			productReference = 9D56088A2F87B393000FACD8 /* TaskMatrix.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DDDD00000000000000000004 /* TaskMatrixTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DDDD00000000000000000005 /* Build configuration list for PBXNativeTarget "TaskMatrixTests" */;
+			buildPhases = (
+				DDDD00000000000000000003 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DDDD00000000000000000001 /* TaskMatrixTests */,
+			);
+			name = TaskMatrixTests;
+			packageProductDependencies = (
+			);
+			productName = TaskMatrixTests;
+			productReference = DDDD00000000000000000002 /* TaskMatrixTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -81,6 +138,9 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					9D5608892F87B393000FACD8 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					DDDD00000000000000000004 = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
@@ -100,6 +160,7 @@
 			projectRoot = "";
 			targets = (
 				9D5608892F87B393000FACD8 /* TaskMatrix */,
+				DDDD00000000000000000004 /* TaskMatrixTests */,
 			);
 		};
 /* End PBXProject section */
@@ -119,6 +180,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DDDD00000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B11100000000000000000001 /* Quadrant.swift in Sources */,
+				B11100000000000000000002 /* TaskItem.swift in Sources */,
+				B11100000000000000000003 /* StatsCalculator.swift in Sources */,
+				B11100000000000000000004 /* DueDateFormatting.swift in Sources */,
+				B11100000000000000000005 /* TaskStore.swift in Sources */,
+				B11100000000000000000006 /* TaskCloudSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,6 +379,36 @@
 			};
 			name = Release;
 		};
+		DDDD00000000000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.test.realtime.TaskMatrixTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DDDD00000000000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.test.realtime.TaskMatrixTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -322,6 +426,15 @@
 			buildConfigurations = (
 				9D5608992F87B394000FACD8 /* Debug */,
 				9D56089A2F87B394000FACD8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DDDD00000000000000000005 /* Build configuration list for PBXNativeTarget "TaskMatrixTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DDDD00000000000000000006 /* Debug */,
+				DDDD00000000000000000007 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

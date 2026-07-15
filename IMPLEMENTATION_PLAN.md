@@ -5,9 +5,10 @@ Source requirements: [task_matrix_requirements.md](./task_matrix_requirements.md
 > **Status (July 2026):** All milestones are implemented, and the app has
 > grown beyond the MVP: redesigned UI with custom form sheets, task
 > selection with keyboard delete, subtasks, and optional due dates. The
-> code is split into Models/Storage/UI layers (section 5). Remaining:
-> manual validation of the end-to-end flow and drag-and-drop stress test
-> (plan section 6).
+> code is split into Models/Storage/UI layers (section 5), and the logic
+> layer (models, storage, statistics, formatting) is covered by a unit-test
+> target (`TaskMatrixTests`, 36 tests). Remaining: manual validation of the
+> end-to-end flow and drag-and-drop stress test (plan section 6).
 
 ## 1. Goal and Scope
 
@@ -155,4 +156,5 @@ The code is split into layers (extracted once the single file grew past
 - [x] Complete task behavior works and is consistent (fade + sort below active tasks)
 - [x] Local auto-save and reload works
 - [x] No multi-page navigation added
+- [x] Logic layer (models, storage, statistics, formatting) covered by unit tests (`TaskMatrixTests`)
 - [ ] End-to-end flow (create -> move -> complete) < 10 seconds (pending manual validation)
