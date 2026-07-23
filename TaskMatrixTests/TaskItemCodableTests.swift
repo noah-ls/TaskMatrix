@@ -13,7 +13,7 @@ final class TaskItemCodableTests: XCTestCase {
         return encoder
     }
 
-    /// A save written before subtasks / due dates / completedAt / order
+    /// A save written before subtasks / due dates / completedAt / order / pinning / archiving
     /// existed must still decode, defaulting the new fields.
     func testDecodesLegacyJSONWithoutNewFields() throws {
         let json = """
@@ -31,6 +31,9 @@ final class TaskItemCodableTests: XCTestCase {
         XCTAssertNil(task.dueDate)
         XCTAssertNil(task.completedAt)
         XCTAssertNil(task.order)
+        XCTAssertFalse(task.isPinned)
+        XCTAssertNil(task.archivedAt)
+        XCTAssertFalse(task.isArchived)
         XCTAssertTrue(task.subtasks.isEmpty)
     }
 
@@ -44,6 +47,8 @@ final class TaskItemCodableTests: XCTestCase {
             dueDate: Date(timeIntervalSince1970: 200),
             completedAt: Date(timeIntervalSince1970: 300),
             order: 2.0,
+            isPinned: true,
+            archivedAt: Date(timeIntervalSince1970: 400),
             subtasks: [SubTask(id: "s1", title: "Sub", isCompleted: true)]
         )
 
@@ -64,6 +69,8 @@ final class TaskItemCodableTests: XCTestCase {
         XCTAssertEqual(tasks[0].subtasks.count, 1)
         XCTAssertEqual(tasks[0].subtasks[0].title, "Step")
         XCTAssertNil(tasks[0].order)
+        XCTAssertFalse(tasks[0].isPinned)
+        XCTAssertNil(tasks[0].archivedAt)
         XCTAssertNil(tasks[0].dueDate)
     }
 }

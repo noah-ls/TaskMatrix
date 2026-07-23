@@ -4,9 +4,11 @@ import Cocoa
 /// exist — a progress badge, a chevron, and the expandable subtask list.
 final class TaskRowView: NSView {
     var onToggleCompleted: ((Bool) -> Void)?
+    var onSetPinned: ((Bool) -> Void)?
     var onEditRequested: (() -> Void)?
     var onMoveRequested: ((Quadrant) -> Void)?
     var onDeleteRequested: (() -> Void)?
+    var onArchiveRequested: (() -> Void)?
     var onSelectRequested: (() -> Void)?
     var onSetDueDate: ((Date?) -> Void)?
     var onAddSubtaskRequested: (() -> Void)?
@@ -119,6 +121,15 @@ final class TaskRowView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu(title: "Task")
 
+        let pinItem = NSMenuItem(
+            title: task.isPinned ? "Unpin" : "Pin",
+            action: #selector(handleTogglePinned(_:)),
+            keyEquivalent: ""
+        )
+        pinItem.target = self
+        menu.addItem(pinItem)
+        menu.addItem(.separator())
+
         let addSubtaskItem = NSMenuItem(title: "Add Subtask…", action: #selector(handleAddSubtask(_:)), keyEquivalent: "")
         addSubtaskItem.target = self
         menu.addItem(addSubtaskItem)
@@ -158,6 +169,11 @@ final class TaskRowView: NSView {
         menu.addItem(moveMenuItem)
         menu.addItem(.separator())
 
+        let archiveItem = NSMenuItem(title: "Archive", action: #selector(handleArchive(_:)), keyEquivalent: "")
+        archiveItem.target = self
+        menu.addItem(archiveItem)
+        menu.addItem(.separator())
+
         let deleteItem = NSMenuItem(title: "Delete", action: #selector(handleDelete(_:)), keyEquivalent: "")
         deleteItem.target = self
         menu.addItem(deleteItem)
@@ -182,7 +198,24 @@ final class TaskRowView: NSView {
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        var headerViews: [NSView] = [completeCheckbox, titleLabel, headerSpacer]
+        var headerViews: [NSView] = [completeCheckbox, titleLabel]
+        var pinnedIconView: NSImageView?
+
+        if task.isPinned {
+            let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
+            let image = NSImage(
+                systemSymbolName: "pin.fill",
+                accessibilityDescription: "Pinned"
+            )?.withSymbolConfiguration(symbolConfig)
+            let pinView = NSImageView(image: image ?? NSImage())
+            pinView.translatesAutoresizingMaskIntoConstraints = false
+            pinView.contentTintColor = task.quadrant.accentColor
+            pinView.toolTip = "Pinned"
+            pinnedIconView = pinView
+            headerViews.append(pinView)
+        }
+
+        headerViews.append(headerSpacer)
 
         if task.isCompleted, task.completedAt != nil {
             completedLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -273,6 +306,13 @@ final class TaskRowView: NSView {
             NSLayoutConstraint.activate([
                 chevronButton.widthAnchor.constraint(equalToConstant: 24),
                 chevronButton.heightAnchor.constraint(equalToConstant: 24)
+            ])
+        }
+
+        if let pinnedIconView {
+            NSLayoutConstraint.activate([
+                pinnedIconView.widthAnchor.constraint(equalToConstant: 13),
+                pinnedIconView.heightAnchor.constraint(equalToConstant: 13)
             ])
         }
 
@@ -415,6 +455,11 @@ final class TaskRowView: NSView {
     }
 
     @objc
+    private func handleTogglePinned(_ sender: NSMenuItem) {
+        onSetPinned?(!task.isPinned)
+    }
+
+    @objc
     private func handleAddSubtask(_ sender: NSMenuItem) {
         onAddSubtaskRequested?()
     }
@@ -439,6 +484,11 @@ final class TaskRowView: NSView {
         }
 
         onMoveRequested?(destination)
+    }
+
+    @objc
+    private func handleArchive(_ sender: NSMenuItem) {
+        onArchiveRequested?()
     }
 
     @objc

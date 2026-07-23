@@ -8,6 +8,10 @@ final class ViewController: NSViewController {
     private var collapsedTaskIDs: Set<String> = []
     private var statsWindowController: NSWindowController?
     private weak var statsViewController: StatsViewController?
+    private var archiveWindowController: NSWindowController?
+    private weak var archiveViewController: ArchiveViewController?
+    private var settingsWindowController: NSWindowController?
+    private var autoArchiveTimer: Timer?
 
     override func loadView() {
         let rootView = MatrixRootView(frame: NSRect(x: 0, y: 0, width: 1080, height: 720))
@@ -25,6 +29,12 @@ final class ViewController: NSViewController {
 
         setupRootUI()
         bindStore()
+        applyAutoArchive()
+        setupAutoArchiveTimer()
+    }
+
+    deinit {
+        autoArchiveTimer?.invalidate()
     }
 
     override func viewDidAppear() {
@@ -83,12 +93,22 @@ final class ViewController: NSViewController {
             action: #selector(handleShowStats(_:))
         )
 
+        let archiveIcon = NSImage(systemSymbolName: "archivebox.fill", accessibilityDescription: "Archive")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .bold))
+        let archiveButton = PillButton(
+            title: "Archive",
+            icon: archiveIcon,
+            style: .outline,
+            target: self,
+            action: #selector(handleShowArchive(_:))
+        )
+
         let headerSpacer = NSView()
         headerSpacer.translatesAutoresizingMaskIntoConstraints = false
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerRow = NSStackView(views: [titleStack, headerSpacer, statsButton, addTaskButton])
+        let headerRow = NSStackView(views: [titleStack, headerSpacer, archiveButton, statsButton, addTaskButton])
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
@@ -163,9 +183,17 @@ final class ViewController: NSViewController {
     }
 
     private func render(tasks: [TaskItem]) {
+        let activeTasks = tasks.filter { !$0.isArchived }
+        if let selectedTaskID, !activeTasks.contains(where: { $0.id == selectedTaskID }) {
+            self.selectedTaskID = nil
+        }
+
         let actions = TaskListActions(
             toggleCompleted: { [weak self] taskID, isCompleted in
                 self?.store.setTaskCompleted(id: taskID, isCompleted: isCompleted)
+            },
+            setPinned: { [weak self] taskID, isPinned in
+                self?.store.setTaskPinned(id: taskID, isPinned: isPinned)
             },
             edit: { [weak self] taskID in
                 self?.presentEditTaskDialog(taskID: taskID)
@@ -175,6 +203,9 @@ final class ViewController: NSViewController {
             },
             delete: { [weak self] taskID in
                 self?.store.deleteTask(id: taskID)
+            },
+            archive: { [weak self] taskID in
+                self?.archiveTask(taskID: taskID)
             },
             select: { [weak self] taskID in
                 self?.selectTask(taskID)
@@ -200,7 +231,7 @@ final class ViewController: NSViewController {
         )
 
         for quadrant in Quadrant.allCases {
-            let quadrantTasks = tasks.filter { $0.quadrant == quadrant }
+            let quadrantTasks = activeTasks.filter { $0.quadrant == quadrant }
             quadrantViews[quadrant]?.render(
                 tasks: quadrantTasks,
                 selectedTaskID: selectedTaskID,
@@ -210,7 +241,20 @@ final class ViewController: NSViewController {
         }
 
         // Keep the stats page live while it's open.
-        statsViewController?.update(tasks: tasks)
+        statsViewController?.update(tasks: activeTasks)
+        archiveViewController?.update(tasks: store.archivedTasks)
+    }
+
+    @discardableResult
+    private func applyAutoArchive() -> Bool {
+        store.archiveCompletedTasks(olderThanDays: AppSettings.autoArchiveDays)
+    }
+
+    private func setupAutoArchiveTimer() {
+        autoArchiveTimer?.invalidate()
+        autoArchiveTimer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+            self?.applyAutoArchive()
+        }
     }
 
     // MARK: - Selection
@@ -236,6 +280,14 @@ final class ViewController: NSViewController {
         } else {
             collapsedTaskIDs.insert(taskID)
         }
+    }
+
+    private func archiveTask(taskID: String) {
+        if selectedTaskID == taskID {
+            selectedTaskID = nil
+        }
+        collapsedTaskIDs.remove(taskID)
+        store.archiveTask(id: taskID)
     }
 
     // MARK: - Deletion
@@ -290,7 +342,7 @@ final class ViewController: NSViewController {
     @objc
     private func handleShowStats(_ sender: Any?) {
         if let windowController = statsWindowController {
-            statsViewController?.update(tasks: store.tasks)
+            statsViewController?.update(tasks: store.activeTasks)
             windowController.showWindow(nil)
             windowController.window?.makeKeyAndOrderFront(nil)
             return
@@ -306,7 +358,89 @@ final class ViewController: NSViewController {
         let windowController = NSWindowController(window: window)
         statsWindowController = windowController
         statsViewController = statsController
-        statsController.update(tasks: store.tasks)
+        statsController.update(tasks: store.activeTasks)
+        windowController.showWindow(nil)
+    }
+
+    // MARK: - Archive
+
+    @objc
+    private func handleShowArchive(_ sender: Any?) {
+        showArchiveWindow()
+    }
+
+    func showArchiveWindow() {
+        if let windowController = archiveWindowController {
+            archiveViewController?.update(tasks: store.archivedTasks)
+            windowController.showWindow(nil)
+            windowController.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let archiveController = ArchiveViewController()
+        archiveController.onRestoreRequested = { [weak self] taskID in
+            self?.store.restoreTask(id: taskID)
+        }
+        archiveController.onDeleteRequested = { [weak self] taskID in
+            self?.confirmAndDeleteArchivedTask(taskID: taskID)
+        }
+
+        let window = NSWindow(contentViewController: archiveController)
+        window.title = "Archived Tasks"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 560, height: 380)
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        archiveWindowController = windowController
+        archiveViewController = archiveController
+        archiveController.update(tasks: store.archivedTasks)
+        windowController.showWindow(nil)
+    }
+
+    private func confirmAndDeleteArchivedTask(taskID: String) {
+        guard let task = store.task(id: taskID) else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Delete Archived Task?"
+        alert.informativeText = "\u{201C}\(task.title)\u{201D} will be deleted. This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+
+        if let window = archiveWindowController?.window {
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                self?.store.deleteTask(id: taskID)
+            }
+        } else if alert.runModal() == .alertFirstButtonReturn {
+            store.deleteTask(id: taskID)
+        }
+    }
+
+    // MARK: - Settings
+
+    func showSettingsWindow() {
+        if let windowController = settingsWindowController {
+            windowController.showWindow(nil)
+            windowController.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let settingsController = SettingsViewController()
+        settingsController.onAutoArchiveDaysChanged = { [weak self] _ in
+            self?.applyAutoArchive()
+        }
+
+        let window = NSWindow(contentViewController: settingsController)
+        window.title = "Settings"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        settingsWindowController = windowController
         windowController.showWindow(nil)
     }
 

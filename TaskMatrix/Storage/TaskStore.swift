@@ -14,6 +14,27 @@ final class TaskStore {
     /// payload is newer than local state (last writer wins).
     private var lastLocalUpdate = Date.distantPast
 
+    var activeTasks: [TaskItem] {
+        tasks.filter { !$0.isArchived }
+    }
+
+    var archivedTasks: [TaskItem] {
+        tasks
+            .filter(\.isArchived)
+            .sorted { lhs, rhs in
+                switch (lhs.archivedAt, rhs.archivedAt) {
+                case let (lDate?, rDate?) where lDate != rDate:
+                    return lDate > rDate
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    return lhs.createdAt > rhs.createdAt
+                }
+            }
+    }
+
     /// - Parameters:
     ///   - storageDirectory: overrides the on-disk location (default:
     ///     Application Support/TaskMatrix). Tests pass a temp directory.
@@ -80,30 +101,42 @@ final class TaskStore {
     /// `order` values are reassigned across the destination group so the new
     /// arrangement survives re-renders and reloads.
     func moveTask(id: String, to quadrant: Quadrant, beforeID: String? = nil) {
-        guard let fromIndex = tasks.firstIndex(where: { $0.id == id }) else { return }
+        guard let taskIndex = tasks.firstIndex(where: { $0.id == id }) else { return }
         // Dropping onto itself keeps the current position.
-        if beforeID == id && tasks[fromIndex].quadrant == quadrant { return }
+        if beforeID == id && tasks[taskIndex].quadrant == quadrant { return }
 
-        var task = tasks.remove(at: fromIndex)
-        task.quadrant = quadrant
+        let completionState = tasks[taskIndex].isCompleted
+        tasks[taskIndex].quadrant = quadrant
 
-        let insertIndex: Int
+        var orderedIDs = sortedTaskIDs(in: quadrant, isCompleted: completionState).filter { $0 != id }
         if let beforeID = beforeID, beforeID != id,
-           let idx = tasks.firstIndex(where: { $0.id == beforeID }) {
-            insertIndex = idx
+           let insertIndex = orderedIDs.firstIndex(of: beforeID) {
+            orderedIDs.insert(id, at: insertIndex)
         } else {
-            insertIndex = tasks.count
+            orderedIDs.append(id)
         }
-        tasks.insert(task, at: insertIndex)
 
-        // Renumber the destination group (same quadrant + completion state) in
-        // its new array order so the sort in the view is stable.
-        let groupIndices = tasks.indices.filter { i in
-            tasks[i].quadrant == quadrant && tasks[i].isCompleted == task.isCompleted
-        }
-        for (rank, idx) in groupIndices.enumerated() {
-            tasks[idx].order = Double(rank)
-        }
+        assignOrder(orderedIDs)
+
+        persistAndNotify()
+    }
+
+    func setTaskPinned(id: String, isPinned: Bool) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        guard tasks[index].isPinned != isPinned else { return }
+
+        let quadrant = tasks[index].quadrant
+        let completionState = tasks[index].isCompleted
+        tasks[index].isPinned = isPinned
+
+        let currentIDs = sortedTaskIDs(in: quadrant, isCompleted: completionState).filter { $0 != id }
+        let pinnedIDs = currentIDs.filter { task(id: $0)?.isPinned == true }
+        let unpinnedIDs = currentIDs.filter { task(id: $0)?.isPinned != true }
+        let orderedIDs = isPinned
+            ? [id] + pinnedIDs + unpinnedIDs
+            : pinnedIDs + [id] + unpinnedIDs
+
+        assignOrder(orderedIDs)
 
         persistAndNotify()
     }
@@ -123,6 +156,54 @@ final class TaskStore {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
 
         tasks.remove(at: index)
+        persistAndNotify()
+    }
+
+    func archiveTask(id: String, archivedAt: Date = Date()) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        guard tasks[index].archivedAt == nil else { return }
+
+        tasks[index].archivedAt = archivedAt
+        tasks[index].isPinned = false
+        persistAndNotify()
+    }
+
+    @discardableResult
+    func archiveCompletedTasks(olderThanDays days: Int, now: Date = Date()) -> Bool {
+        guard days > 0 else { return false }
+
+        let calendar = Calendar.current
+        guard let cutoffDay = calendar.date(
+            byAdding: .day,
+            value: -days,
+            to: calendar.startOfDay(for: now)
+        ) else {
+            return false
+        }
+
+        var didArchive = false
+        for index in tasks.indices {
+            guard tasks[index].archivedAt == nil, tasks[index].isCompleted else { continue }
+
+            let archiveReference = tasks[index].completedAt ?? tasks[index].createdAt
+            guard calendar.startOfDay(for: archiveReference) <= cutoffDay else { continue }
+
+            tasks[index].archivedAt = now
+            tasks[index].isPinned = false
+            didArchive = true
+        }
+
+        if didArchive {
+            persistAndNotify()
+        }
+        return didArchive
+    }
+
+    func restoreTask(id: String) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        guard tasks[index].archivedAt != nil else { return }
+
+        tasks[index].archivedAt = nil
         persistAndNotify()
     }
 
@@ -171,6 +252,20 @@ final class TaskStore {
 
     func task(id: String) -> TaskItem? {
         tasks.first(where: { $0.id == id })
+    }
+
+    private func sortedTaskIDs(in quadrant: Quadrant, isCompleted: Bool) -> [String] {
+        tasks
+            .filter { $0.quadrant == quadrant && $0.isCompleted == isCompleted }
+            .sorted { $0.sortsBefore($1) }
+            .map(\.id)
+    }
+
+    private func assignOrder(_ orderedIDs: [String]) {
+        for (rank, id) in orderedIDs.enumerated() {
+            guard let index = tasks.firstIndex(where: { $0.id == id }) else { continue }
+            tasks[index].order = Double(rank)
+        }
     }
 
     private func persistAndNotify() {

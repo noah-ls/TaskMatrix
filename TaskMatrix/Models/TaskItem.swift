@@ -20,7 +20,17 @@ struct TaskItem: Codable, Equatable {
     /// nil means use createdAt. When dragging to reorder, we assign explicit
     /// order values to the affected tasks.
     var order: Double?
+    /// Pinned tasks sort above unpinned tasks within the same quadrant and
+    /// completion state. Older saves default this to false.
+    var isPinned: Bool
+    /// When non-nil, the task is hidden from the active matrix and appears in
+    /// the archive list.
+    var archivedAt: Date?
     var subtasks: [SubTask]
+
+    var isArchived: Bool {
+        archivedAt != nil
+    }
 
     init(
         id: String,
@@ -31,6 +41,8 @@ struct TaskItem: Codable, Equatable {
         dueDate: Date? = nil,
         completedAt: Date? = nil,
         order: Double? = nil,
+        isPinned: Bool = false,
+        archivedAt: Date? = nil,
         subtasks: [SubTask] = []
     ) {
         self.id = id
@@ -41,6 +53,8 @@ struct TaskItem: Codable, Equatable {
         self.dueDate = dueDate
         self.completedAt = completedAt
         self.order = order
+        self.isPinned = isPinned
+        self.archivedAt = archivedAt
         self.subtasks = subtasks
     }
 
@@ -55,6 +69,30 @@ struct TaskItem: Codable, Equatable {
         dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         order = try container.decodeIfPresent(Double.self, forKey: .order)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         subtasks = try container.decodeIfPresent([SubTask].self, forKey: .subtasks) ?? []
+    }
+
+    func sortsBefore(_ other: TaskItem) -> Bool {
+        if isCompleted != other.isCompleted {
+            return !isCompleted
+        }
+        if isPinned != other.isPinned {
+            return isPinned
+        }
+        if let lOrder = order, let rOrder = other.order {
+            return lOrder < rOrder
+        }
+        if order != nil {
+            return true
+        }
+        if other.order != nil {
+            return false
+        }
+        if createdAt != other.createdAt {
+            return createdAt < other.createdAt
+        }
+        return id < other.id
     }
 }

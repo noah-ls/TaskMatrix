@@ -17,6 +17,13 @@ final class TaskStoreTests: XCTestCase {
         TaskStore(storageDirectory: tempDir, syncsToCloud: false)
     }
 
+    private func writeTasks(_ tasks: [TaskItem]) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(tasks)
+        try data.write(to: tempDir.appendingPathComponent("tasks.json"), options: .atomic)
+    }
+
     // MARK: - CRUD
 
     func testAddTask() {
@@ -115,16 +122,11 @@ final class TaskStoreTests: XCTestCase {
 
     // MARK: - Reorder
 
-    /// The view's sort: explicit order first, then createdAt.
+    /// The view's sort: open first, then pinned, then explicit order/createdAt.
     private func openOrder(_ store: TaskStore, _ quadrant: Quadrant) -> [String] {
         store.tasks
             .filter { $0.quadrant == quadrant && !$0.isCompleted }
-            .sorted { lhs, rhs in
-                if let lo = lhs.order, let ro = rhs.order { return lo < ro }
-                if lhs.order != nil { return true }
-                if rhs.order != nil { return false }
-                return lhs.createdAt < rhs.createdAt
-            }
+            .sorted { $0.sortsBefore($1) }
             .map(\.title)
     }
 
@@ -179,16 +181,136 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(store.task(id: id(store, "Z"))!.quadrant, .q2)
     }
 
+    // MARK: - Pinning
+
+    func testPinTaskMovesItToTopOfOpenGroup() {
+        let store = makeStore()
+        seedFour(store)
+
+        store.setTaskPinned(id: id(store, "C"), isPinned: true)
+
+        XCTAssertTrue(store.task(id: id(store, "C"))!.isPinned)
+        XCTAssertEqual(openOrder(store, .q1), ["C", "A", "B", "D"])
+    }
+
+    func testMostRecentlyPinnedTaskBecomesTopPinnedTask() {
+        let store = makeStore()
+        seedFour(store)
+
+        store.setTaskPinned(id: id(store, "C"), isPinned: true)
+        store.setTaskPinned(id: id(store, "B"), isPinned: true)
+
+        XCTAssertEqual(openOrder(store, .q1), ["B", "C", "A", "D"])
+    }
+
+    func testUnpinTaskLeavesRemainingPinnedTasksAboveIt() {
+        let store = makeStore()
+        seedFour(store)
+
+        store.setTaskPinned(id: id(store, "C"), isPinned: true)
+        store.setTaskPinned(id: id(store, "B"), isPinned: true)
+        store.setTaskPinned(id: id(store, "B"), isPinned: false)
+
+        XCTAssertFalse(store.task(id: id(store, "B"))!.isPinned)
+        XCTAssertEqual(openOrder(store, .q1), ["C", "B", "A", "D"])
+    }
+
+    // MARK: - Archive
+
+    func testArchiveCompletedTasksOlderThanThreshold() throws {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 7, day: 23, hour: 12))!
+        let oldCompletedAt = calendar.date(byAdding: .day, value: -16, to: now)!
+        let recentCompletedAt = calendar.date(byAdding: .day, value: -14, to: now)!
+        let oldCreatedAt = calendar.date(byAdding: .day, value: -30, to: now)!
+
+        try writeTasks([
+            TaskItem(
+                id: "oldDone",
+                title: "Old Done",
+                quadrant: .q1,
+                isCompleted: true,
+                createdAt: oldCreatedAt,
+                completedAt: oldCompletedAt,
+                isPinned: true
+            ),
+            TaskItem(
+                id: "recentDone",
+                title: "Recent Done",
+                quadrant: .q1,
+                isCompleted: true,
+                createdAt: recentCompletedAt,
+                completedAt: recentCompletedAt
+            ),
+            TaskItem(
+                id: "oldOpen",
+                title: "Old Open",
+                quadrant: .q2,
+                isCompleted: false,
+                createdAt: oldCreatedAt
+            )
+        ])
+
+        let store = makeStore()
+        XCTAssertTrue(store.archiveCompletedTasks(olderThanDays: 15, now: now))
+
+        XCTAssertNotNil(store.task(id: "oldDone")!.archivedAt)
+        XCTAssertFalse(store.task(id: "oldDone")!.isPinned)
+        XCTAssertNil(store.task(id: "recentDone")!.archivedAt)
+        XCTAssertNil(store.task(id: "oldOpen")!.archivedAt)
+        XCTAssertEqual(store.activeTasks.map(\.id).sorted(), ["oldOpen", "recentDone"])
+        XCTAssertEqual(store.archivedTasks.map(\.id), ["oldDone"])
+    }
+
+    func testArchiveTaskMovesActiveTaskToArchive() {
+        let store = makeStore()
+        store.addTask(title: "Manual Archive", quadrant: .q2)
+        let taskID = id(store, "Manual Archive")
+
+        store.setTaskPinned(id: taskID, isPinned: true)
+        store.archiveTask(id: taskID, archivedAt: Date(timeIntervalSince1970: 2_000))
+
+        let task = store.task(id: taskID)!
+        XCTAssertNotNil(task.archivedAt)
+        XCTAssertFalse(task.isPinned)
+        XCTAssertTrue(store.activeTasks.isEmpty)
+        XCTAssertEqual(store.archivedTasks.map(\.id), [taskID])
+    }
+
+    func testRestoreTaskClearsArchiveDate() throws {
+        let archivedAt = Date(timeIntervalSince1970: 1000)
+        try writeTasks([
+            TaskItem(
+                id: "archived",
+                title: "Archived",
+                quadrant: .q3,
+                isCompleted: true,
+                createdAt: Date(timeIntervalSince1970: 100),
+                completedAt: Date(timeIntervalSince1970: 200),
+                archivedAt: archivedAt
+            )
+        ])
+
+        let store = makeStore()
+        store.restoreTask(id: "archived")
+
+        XCTAssertNil(store.task(id: "archived")!.archivedAt)
+        XCTAssertEqual(store.activeTasks.map(\.id), ["archived"])
+        XCTAssertTrue(store.archivedTasks.isEmpty)
+    }
+
     // MARK: - Persistence
 
     func testPersistenceRoundTrip() {
         let store1 = makeStore()
         store1.addTask(title: "Persisted", quadrant: .q3)
+        store1.setTaskPinned(id: id(store1, "Persisted"), isPinned: true)
 
         let store2 = TaskStore(storageDirectory: tempDir, syncsToCloud: false)
         XCTAssertEqual(store2.tasks.count, 1)
         XCTAssertEqual(store2.tasks.first?.title, "Persisted")
         XCTAssertEqual(store2.tasks.first?.quadrant, .q3)
+        XCTAssertTrue(store2.tasks.first?.isPinned == true)
     }
 
     func testLoadsLegacyJSONFile() throws {
@@ -205,5 +327,7 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(store.tasks.count, 1)
         XCTAssertEqual(store.tasks[0].quadrant, .q4)
         XCTAssertNil(store.tasks[0].order)
+        XCTAssertFalse(store.tasks[0].isPinned)
+        XCTAssertNil(store.tasks[0].archivedAt)
     }
 }

@@ -3,9 +3,11 @@ import Cocoa
 /// Callbacks a task list needs, bundled so they thread through in one piece.
 struct TaskListActions {
     let toggleCompleted: (String, Bool) -> Void
+    let setPinned: (String, Bool) -> Void
     let edit: (String) -> Void
     let move: (String, Quadrant) -> Void
     let delete: (String) -> Void
+    let archive: (String) -> Void
     let select: (String) -> Void
     let setDueDate: (String, Date?) -> Void
     let addSubtask: (String) -> Void
@@ -96,23 +98,7 @@ final class QuadrantCardView: NSView {
         emptyStateLabel.isHidden = !tasks.isEmpty
         countLabel.stringValue = "\(openCount)"
 
-        let sortedTasks = tasks.sorted { lhs, rhs in
-            if lhs.isCompleted != rhs.isCompleted {
-                return !lhs.isCompleted
-            }
-            // Within the same completion state, sort by explicit order first,
-            // then by creation time as a fallback.
-            if let lOrder = lhs.order, let rOrder = rhs.order {
-                return lOrder < rOrder
-            }
-            if lhs.order != nil {
-                return true
-            }
-            if rhs.order != nil {
-                return false
-            }
-            return lhs.createdAt < rhs.createdAt
-        }
+        let sortedTasks = tasks.sorted { $0.sortsBefore($1) }
 
         for task in sortedTasks {
             let row = TaskRowView(
@@ -126,6 +112,9 @@ final class QuadrantCardView: NSView {
             row.onToggleCompleted = { isCompleted in
                 actions.toggleCompleted(task.id, isCompleted)
             }
+            row.onSetPinned = { isPinned in
+                actions.setPinned(task.id, isPinned)
+            }
             row.onEditRequested = {
                 actions.edit(task.id)
             }
@@ -134,6 +123,9 @@ final class QuadrantCardView: NSView {
             }
             row.onDeleteRequested = {
                 actions.delete(task.id)
+            }
+            row.onArchiveRequested = {
+                actions.archive(task.id)
             }
             row.onSelectRequested = {
                 actions.select(task.id)
