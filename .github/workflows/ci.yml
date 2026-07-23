@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build app
+        run: xcodebuild build -project TaskMatrix.xcodeproj -scheme TaskMatrix -destination 'platform=macOS'
+
+      - name: Run tests
+        run: xcodebuild test -project TaskMatrix.xcodeproj -scheme TaskMatrixTests -destination 'platform=macOS'
+

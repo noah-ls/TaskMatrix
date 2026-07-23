@@ -1,117 +1,178 @@
 # TaskMatrix
 
-A lightweight macOS task prioritization app based on the **Eisenhower Matrix**. It helps you decide what to do *next*, not just list tasks.
+TaskMatrix is a lightweight macOS task prioritization app based on the
+Eisenhower Matrix. It keeps planning simple: decide what to do now, schedule,
+delegate, or eliminate.
 
-Tasks live in a single window, organized into four quadrants by importance and urgency:
+Tasks are organized into four quadrants:
 
 | | Urgent | Not Urgent |
 |---|---|---|
-| **Important** | Q1 · Do First | Q2 · Schedule |
-| **Not Important** | Q3 · Delegate | Q4 · Eliminate |
+| Important | Q1 - Do First | Q2 - Schedule |
+| Not Important | Q3 - Delegate | Q4 - Eliminate |
 
 ## Features
 
-- **Quick create** — add a task via the `+ New Task` button, `⌘N`, or the `+` button on any quadrant card (which preselects that quadrant); in the form, Tab moves from the title to the quadrant picker and cycles it, Enter submits, Esc cancels
-- **2×2 matrix view** — all four quadrants visible at once, each with its own scrollable task list and task count
-- **Edit in place** — double-click a task to rename it
-- **Move & reorder by dragging** — drag a task onto another quadrant to move it, or drag it up/down within its own quadrant to reorder; the drop position (above or below a row) decides where it lands. Custom order persists. Right-click → *Move to* also works
-- **Complete & delete** — checkbox to mark done (completed tasks fade and sink to the bottom); delete via right-click → *Delete*, or select a task and press ⌫ (a confirmation shows — Enter confirms)
-- **Subtasks** — right-click a task → *Add Subtask…* to break it into steps; check steps off individually (the parent shows `done/total` progress), collapse/expand the list with the chevron, and rename or delete via right-click. Completing the parent completes all its subtasks
-- **Due dates** — optionally set a date-only deadline (off by default): click *Add Due Date…* in the task form or right-click a task → *Set Due Date…*; both open a styled calendar popover where one click picks the day. The task shows a due badge ("Today", "Tomorrow", or the date) that turns red when overdue and amber when due today; clear it via the ✕ in the form or right-click → *Clear Due Date*
-- **Statistics** — the *Statistics* button in the header opens a separate live-updating window: open/completed/overdue counts and on-time rate, open tasks per quadrant with a health insight, and a 14-day completion trend
-- **Auto-save** — every change is persisted immediately; no manual save
+- 2x2 matrix view with all four quadrants visible in one window.
+- Quick task creation from the toolbar, keyboard shortcut, or quadrant cards.
+- Edit tasks by double-clicking a row.
+- Drag tasks between quadrants or reorder them inside a quadrant.
+- Right-click task actions: pin/unpin, add subtask, set due date, move, archive,
+  and delete.
+- Subtasks with individual completion state and expandable rows.
+- Date-only due dates with Today, Tomorrow, overdue, and absolute-date display.
+- Pinned tasks stay at the top of their open/completed group.
+- Completed tasks are visually muted and sorted below open tasks.
+- Archived Tasks window with restore and delete actions.
+- Automatic archive for completed tasks older than the configured threshold.
+- Settings window from the macOS app menu for archive retention.
+- Statistics window for open, completed, overdue, on-time, quadrant, and trend
+  metrics.
+- Local JSON persistence with atomic writes.
+- Optional iCloud key-value sync when the app is signed with the required
+  entitlement.
 
-## Persistence
+## Requirements
 
-Tasks are stored locally as JSON. The app is sandboxed, so the file lives in
-its container:
+- macOS
+- Xcode with Swift 5 and AppKit support
+- No external package dependencies
 
-```
-~/Library/Containers/<bundle-id>/Data/Library/Application Support/TaskMatrix/tasks.json
-```
+## Bundle Identifiers
 
-Writes are atomic. Saves from older versions load unchanged — newer
-optional fields (subtasks, due date) default gracefully.
+The open-source defaults are:
 
-### iCloud sync
+- App target: `io.github.noah-ls.TaskMatrix`
+- Test target: `io.github.noah-ls.TaskMatrixTests`
 
-Every change is also pushed to iCloud's key-value store, and payloads from
-other devices are adopted automatically (last writer wins, newest
-timestamp). The sync layer degrades gracefully: without the iCloud
-entitlement it silently stays device-local.
+If you ship your own build, change these identifiers to values you control.
+If you enable iCloud key-value sync, the bundle identifier must also match the
+Apple Developer App ID and entitlement configuration for your team.
 
-To activate real cross-device sync, iCloud requires development signing:
+## Building
 
-1. Open the project in Xcode and sign in to an Apple Developer account
-   (Settings → Accounts).
-2. In *Signing & Capabilities*, pick your Team.
-3. Set *Code Signing Entitlements* to `TaskMatrix/TaskMatrix.entitlements`
-   (already in the repo, containing the key-value store entitlement), or
-   add the iCloud → Key-value storage capability.
-
-## Requirements & Building
-
-- macOS with Xcode installed
-- Swift 5 / AppKit (no external dependencies)
+Open the project in Xcode:
 
 ```sh
 open TaskMatrix.xcodeproj
 ```
 
-Then build and run the `TaskMatrix` scheme (⌘R).
+Then choose the `TaskMatrix` scheme and run it.
+
+Command-line build:
+
+```sh
+xcodebuild build -project TaskMatrix.xcodeproj -scheme TaskMatrix -destination 'platform=macOS'
+```
+
+Release build:
+
+```sh
+xcodebuild build -project TaskMatrix.xcodeproj -scheme TaskMatrix -configuration Release -destination 'platform=macOS'
+```
 
 ## Testing
 
-Unit tests cover the pure logic — models, storage, statistics, and formatting —
-in a standalone logic-test target (no host app needed). Run them with:
+Run the logic test suite:
 
 ```sh
 xcodebuild test -project TaskMatrix.xcodeproj -scheme TaskMatrixTests -destination 'platform=macOS'
 ```
 
-or press ⌘U in Xcode. Coverage includes `Quadrant`, `TaskItem` Codable
-(including backward-compatible decoding of older saves), `DueDateFormatting`,
-`StatsCalculator`, and `TaskStore` CRUD, subtask cascade, drag-reorder, and
-persistence. `TaskStore` takes an injectable storage directory and a
-`syncsToCloud` flag so tests run against a temp directory without touching real
-data or iCloud.
+The test target covers models, backward-compatible decoding, date formatting,
+statistics, persistence, task CRUD, subtasks, drag reorder, pinning, archiving,
+and restore behavior.
+
+## Continuous Integration
+
+GitHub Actions runs the app build and unit tests on every push to `main` and on
+pull requests. See `.github/workflows/ci.yml`.
+
+## Persistence
+
+Tasks are stored locally as JSON. Because the app is sandboxed, the file lives
+inside the app container:
+
+```text
+~/Library/Containers/<bundle-id>/Data/Library/Application Support/TaskMatrix/tasks.json
+```
+
+Writes are atomic. New optional fields are decoded with defaults so older save
+files continue to load.
+
+## iCloud Sync
+
+`TaskCloudSync` mirrors the task list to iCloud key-value storage and adopts
+newer remote payloads using last-writer-wins semantics. The app works without
+iCloud signing; sync simply remains local-only when the entitlement is absent.
+
+To enable iCloud sync in your own distribution:
+
+1. Sign in to an Apple Developer account in Xcode.
+2. Select your development team in Signing & Capabilities.
+3. Use a bundle identifier registered to your team.
+4. Add the iCloud key-value storage entitlement or configure
+   `TaskMatrix/TaskMatrix.entitlements` for your target.
+
+## Packaging
+
+Generated DMG files are ignored by git. For public releases, build the Release
+configuration and attach the DMG to a GitHub Release. For end-user
+distribution, sign and notarize the app with your own Apple Developer ID.
 
 ## Project Structure
 
-```
+```text
 TaskMatrix/
 ├── TaskMatrix/
-│   ├── AppDelegate.swift              # App lifecycle, light appearance
-│   ├── ViewController.swift           # Main controller: layout, selection, sheets
+│   ├── AppDelegate.swift
+│   ├── ViewController.swift
 │   ├── Models/
-│   │   ├── Quadrant.swift             # Quadrant enum (titles, strategy)
-│   │   └── TaskItem.swift             # TaskItem + SubTask models (Codable)
+│   │   ├── Quadrant.swift
+│   │   └── TaskItem.swift
 │   ├── Storage/
-│   │   └── TaskStore.swift            # JSON load/save, task + subtask CRUD
+│   │   ├── AppSettings.swift
+│   │   ├── TaskCloudSync.swift
+│   │   └── TaskStore.swift
+│   ├── Stats/
+│   │   ├── StatsCalculator.swift
+│   │   └── StatsViewController.swift
 │   ├── UI/
-│   │   ├── Theme.swift                # Colors, quadrant accents, pasteboard type
-│   │   ├── PillButton.swift           # Pill CTA with hover/press scale
-│   │   ├── MatrixRootView.swift       # Key handling, background clicks
-│   │   ├── QuadrantCardView.swift     # Quadrant card, task list, drop target
-│   │   ├── TaskRowView.swift          # Task card with expandable subtasks
-│   │   ├── SubtaskRowView.swift       # Indented subtask line
-│   │   ├── QuadrantPicker.swift       # 2x2 quadrant tiles for the form
-│   │   └── TaskFormViewController.swift  # Create/edit sheet (tasks + subtasks)
+│   │   ├── ArchiveViewController.swift
+│   │   ├── CalendarPickerView.swift
+│   │   ├── CalendarPopover.swift
+│   │   ├── DueDateFormatting.swift
+│   │   ├── MatrixRootView.swift
+│   │   ├── PillButton.swift
+│   │   ├── QuadrantCardView.swift
+│   │   ├── QuadrantPicker.swift
+│   │   ├── SettingsViewController.swift
+│   │   ├── SubtaskRowView.swift
+│   │   ├── TaskFormViewController.swift
+│   │   ├── TaskRowView.swift
+│   │   └── Theme.swift
 │   └── Base.lproj/Main.storyboard
-├── TaskMatrixTests/                   # Unit tests (logic-test target)
-├── task_matrix_requirements.md        # Product requirements
-├── IMPLEMENTATION_PLAN.md             # Milestone plan
-└── DESIGN.md                          # Visual design reference (Wise-inspired)
+├── TaskMatrixTests/
+├── .github/
+├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md
+├── SECURITY.md
+├── SUPPORT.md
+├── PRIVACY.md
+└── LICENSE
 ```
 
-## Design
+## Contributing
 
-The UI takes cues from Wise's design language (see [DESIGN.md](DESIGN.md)): a warm off-white canvas, lime-green accent with dark-green text, heavy black display type, pill-shaped buttons with scale-on-hover animation, and large rounded cards with subtle ring borders.
+Issues and pull requests are welcome. Read `CONTRIBUTING.md` before opening a
+PR. For security issues, follow `SECURITY.md` instead of filing a public issue.
 
-## Scope
+## Privacy
 
-Explicitly out of scope for the MVP: sync, reminders, tags, AI, analytics.
+TaskMatrix stores task data locally and can optionally sync through the user's
+own iCloud account. It does not include analytics, advertising, or third-party
+network services. See `PRIVACY.md`.
 
 ## License
 
-Public domain — see [LICENSE](LICENSE) (Unlicense).
+TaskMatrix is released under the MIT License. See `LICENSE`.
