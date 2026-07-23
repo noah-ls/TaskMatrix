@@ -88,6 +88,8 @@ and restore behavior.
 GitHub Actions runs the app build and unit tests on every push to `main` and on
 pull requests. See `.github/workflows/ci.yml`.
 
+Tag pushes matching `v*` run the release workflow. See `RELEASE.md`.
+
 ## Persistence
 
 Tasks are stored locally as JSON. Because the app is sandboxed, the file lives
@@ -116,9 +118,21 @@ To enable iCloud sync in your own distribution:
 
 ## Packaging
 
-Generated DMG files are ignored by git. For public releases, build the Release
-configuration and attach the DMG to a GitHub Release. For end-user
-distribution, sign and notarize the app with your own Apple Developer ID.
+Generated DMG files are ignored by git. Build the Release configuration and use
+the packaging script:
+
+```sh
+xcodebuild build -project TaskMatrix.xcodeproj -scheme TaskMatrix -configuration Release -destination 'platform=macOS' -derivedDataPath DerivedData
+scripts/package_dmg.sh DerivedData/Build/Products/Release/TaskMatrix.app TaskMatrix-1.0.0.dmg
+hdiutil verify TaskMatrix-1.0.0.dmg
+```
+
+For public releases, update `CHANGELOG.md`, tag a version such as `v1.0.0`, and
+push the tag. The release workflow builds, tests, packages, verifies, and
+uploads the DMG to GitHub Releases. For end-user distribution, sign and notarize
+the app with your own Apple Developer ID.
+
+See `RELEASE.md` for the full release process.
 
 ## Project Structure
 
@@ -159,6 +173,9 @@ TaskMatrix/
 ├── SECURITY.md
 ├── SUPPORT.md
 ├── PRIVACY.md
+├── CHANGELOG.md
+├── RELEASE.md
+├── scripts/
 └── LICENSE
 ```
 
@@ -172,6 +189,10 @@ PR. For security issues, follow `SECURITY.md` instead of filing a public issue.
 TaskMatrix stores task data locally and can optionally sync through the user's
 own iCloud account. It does not include analytics, advertising, or third-party
 network services. See `PRIVACY.md`.
+
+## Changelog
+
+Release notes are tracked in `CHANGELOG.md`.
 
 ## License
 
