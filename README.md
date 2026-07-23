@@ -1,5 +1,10 @@
 # TaskMatrix
 
+[![CI](https://github.com/noah-ls/TaskMatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ls/TaskMatrix/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/noah-ls/TaskMatrix)](https://github.com/noah-ls/TaskMatrix/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](README.md)
+
 TaskMatrix is a lightweight macOS task prioritization app based on the
 Eisenhower Matrix. It keeps planning simple: decide what to do now, schedule,
 delegate, or eliminate.
